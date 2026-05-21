@@ -28,7 +28,6 @@ services:
     runtime: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
-    plan: free
     envVars:
       # Set this to your backend URL after it is deployed:
       # https://dashboard.render.com → mushroom-frontend → Environment
