@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import AIStage, MQTTStatus
 
@@ -9,8 +9,18 @@ from app.models.enums import AIStage, MQTTStatus
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
 
 class EnvironmentPayload(BaseModel):
-    temperature: float = Field(..., ge=-20, le=80, description="°C")
-    humidity:    float = Field(..., ge=0,   le=100, description="%")
+    """Matches firmware SensorData struct — timestamp is Unix epoch from device."""
+    timestamp:       datetime
+    air_temperature: float = Field(..., ge=-20, le=80,  description="°C")
+    air_humidity:    float = Field(..., ge=0,   le=100, description="%")
+    soil_moisture:   float = Field(..., ge=0,   le=100, description="%")
+
+    @field_validator("timestamp", mode="before")
+    @classmethod
+    def _parse_unix_ts(cls, v):
+        if isinstance(v, (int, float)):
+            return datetime.fromtimestamp(v, tz=timezone.utc)
+        return v
 
 
 class DevicesPayload(BaseModel):
@@ -25,8 +35,8 @@ class AIPayload(BaseModel):
 
 # ─── API responses ────────────────────────────────────────────────────────────
 
-class EnvironmentRecord(EnvironmentPayload):
-    timestamp: datetime
+# timestamp is now part of the payload itself
+EnvironmentRecord = EnvironmentPayload
 
 
 class DevicesRecord(DevicesPayload):

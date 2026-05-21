@@ -58,8 +58,8 @@ def _on_message(client, userdata, msg):
     try:
         if topic == settings.topic_environment:
             payload = EnvironmentPayload(**data)
-            store.update_environment(payload, ts)
-            print(f"[ENV]  {payload.temperature}°C  {payload.humidity}%")
+            store.update_environment(payload, payload.timestamp)
+            print(f"[ENV]  {payload.air_temperature}°C  hum={payload.air_humidity}%  soil={payload.soil_moisture}%")
 
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
