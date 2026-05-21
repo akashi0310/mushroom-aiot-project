@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from app.models.enums import AIStage, MQTTStatus
 
@@ -9,11 +9,23 @@ from app.models.enums import AIStage, MQTTStatus
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
 
 class EnvironmentPayload(BaseModel):
-    """Matches firmware SensorData struct — timestamp is Unix epoch from device."""
-    timestamp:       datetime
-    air_temperature: float = Field(..., ge=-20, le=80,  description="°C")
-    air_humidity:    float = Field(..., ge=0,   le=100, description="%")
-    soil_moisture:   float = Field(..., ge=0,   le=100, description="%")
+    """
+    Accepts both legacy firmware format {temperature, humidity}
+    and new SensorData struct {air_temperature, air_humidity, soil_moisture, timestamp}.
+    """
+    # Falls back to server time when device does not send timestamp
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    air_temperature: float = Field(
+        ..., ge=-20, le=80, description="°C",
+        validation_alias=AliasChoices("air_temperature", "temperature"),
+    )
+    air_humidity: float = Field(
+        ..., ge=0, le=100, description="%",
+        validation_alias=AliasChoices("air_humidity", "humidity"),
+    )
+    # Optional until firmware sends it
+    soil_moisture: float = Field(default=0.0, ge=0, le=100, description="%")
 
     @field_validator("timestamp", mode="before")
     @classmethod
