@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     mqtt_broker: str = "broker.emqx.io"
     mqtt_port: int = 1883
     mqtt_topic_prefix: str = "mushroom-farm"
+    mqtt_username: str = ""
+    mqtt_password: str = ""
+    mqtt_ca_cert: str = ""   # path to CA cert file, required for port 8883
 
     # Server
     server_host: str = "0.0.0.0"

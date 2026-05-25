@@ -23,6 +23,8 @@ pip-delete-this-directory.txt
 !.env.example
 *.key
 *.pem
+*.crt
+*.cer
 secrets.json
 config.local.*
 
