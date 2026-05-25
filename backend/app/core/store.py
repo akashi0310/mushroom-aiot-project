@@ -46,10 +46,10 @@ class AppStore:
 
     def to_state_dict(self) -> dict:
         return {
-            "environment":  self.environment.model_dump()  if self.environment  else None,
-            "devices":      self.devices.model_dump()      if self.devices      else None,
-            "ai":           self.ai.model_dump()           if self.ai           else None,
-            "last_updated": self.last_updated.isoformat()  if self.last_updated else None,
+            "environment":  self.environment.model_dump(mode="json")  if self.environment  else None,
+            "devices":      self.devices.model_dump(mode="json")      if self.devices      else None,
+            "ai":           self.ai.model_dump(mode="json")           if self.ai           else None,
+            "last_updated": self.last_updated.isoformat()             if self.last_updated else None,
             "mqtt_status":  self.mqtt_status.value,
         }
 

@@ -1,5 +1,5 @@
-import { useRef, useMemo, Suspense } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { useRef, useMemo, Suspense, useLayoutEffect } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -11,9 +11,29 @@ const SOIL_H = 0.18
 
 function tH(x, z) {
   return 0.074
-    + Math.sin(x * 4.4 + 1.1) * Math.cos(z * 3.7 + 0.6) * 0.036
-    + Math.sin(x * 8.8 + z * 6.8) * 0.014
-    + Math.cos(x * 5.9 - z * 5.2) * 0.021
+    + Math.sin(x*4.4+1.1)*Math.cos(z*3.7+0.6)*0.036
+    + Math.sin(x*8.8+z*6.8)*0.014
+    + Math.cos(x*5.9-z*5.2)*0.021
+}
+
+// -1 (extreme cold 12°C) → 0 (optimal 22–28°C) → +1 (extreme hot 38°C)
+function calcTempStress(temp) {
+  if (temp <= 22) return Math.max(-1, (temp - 22) / 10)
+  if (temp >= 28) return Math.min( 1, (temp - 28) / 10)
+  return 0
+}
+
+// Shift cap color based on temperature stress
+function stressColor(hex, ts) {
+  const c = new THREE.Color(hex)
+  if (ts < 0)    return '#' + c.lerp(new THREE.Color('#B8D4F8'), Math.min(1, -ts * 0.85)).getHexString()
+  if (ts <= 0.5) return '#' + c.lerp(new THREE.Color('#D4A030'), ts * 2).getHexString()
+  return '#' + new THREE.Color('#D4A030').lerp(new THREE.Color('#6B3010'), (ts - 0.5) * 2).getHexString()
+}
+
+function easeOutBack(t) {
+  const c1 = 1.4, c3 = c1 + 1
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
 }
 
 // ─── box constants ────────────────────────────────────────────────────────────
@@ -22,7 +42,16 @@ const HW = 0.96
 const HH = 0.78
 const HD = 0.66
 
-// ─── terrarium base tray only — no frame edges ───────────────────────────────
+// ─── precomputed frost crystal positions ─────────────────────────────────────
+
+const FROST_POS = Array.from({ length: 44 }, (_, i) => ({
+  x:   (sr(i*31)   - 0.5) * HW*2*0.82,
+  y:   (sr(i*31+1) - 0.5) * HH*2*0.82,
+  s:    0.022 + sr(i*31+2)*0.038,
+  rot:  sr(i*31+3) * Math.PI,
+}))
+
+// ─── terrarium base tray ──────────────────────────────────────────────────────
 
 function TerrariumBase() {
   return (
@@ -39,10 +68,10 @@ function TerrariumGlass() {
   const W = HW*2, H = HH*2, D = HD*2
   const drops = useMemo(() =>
     Array.from({ length: 16 }, (_, i) => ({
-      x:     (sr(i*17)     - 0.5) * W * 0.78,
-      y:     (sr(i*17+1)   - 0.5) * H * 0.78,
-      r:      0.010 + sr(i*17+2) * 0.020,
-      left:   i % 4 === 0,
+      x:    (sr(i*17)   - 0.5) * W * 0.78,
+      y:    (sr(i*17+1) - 0.5) * H * 0.78,
+      r:     0.010 + sr(i*17+2) * 0.020,
+      left:  i % 4 === 0,
     }))
   , [W, H])
 
@@ -69,12 +98,11 @@ function TerrariumGlass() {
   )
 }
 
-// ─── terrain — solid soil volume + displaced surface ──────────────────────────
+// ─── terrain ─────────────────────────────────────────────────────────────────
 
 function Terrain() {
   const sW = HW*2 - 0.01
   const sD = HD*2 - 0.01
-
   const geo = useMemo(() => {
     const g = new THREE.PlaneGeometry(sW, sD, 26, 20)
     g.rotateX(-Math.PI / 2)
@@ -89,7 +117,6 @@ function Terrain() {
       <mesh geometry={geo} receiveShadow>
         <meshStandardMaterial color="#3C2214" roughness={0.96} />
       </mesh>
-      {/* solid block fills the full lower section — visible from all sides */}
       <mesh position={[0, SOIL_H*0.5, 0]}>
         <boxGeometry args={[sW, SOIL_H, sD]} />
         <meshStandardMaterial color="#2C180A" roughness={0.98} />
@@ -161,7 +188,7 @@ function Pebbles() {
         <mesh key={i}
           position={[px, SOIL_H+tH(px,pz)+0.020, pz]}
           scale={[(0.75+sr(i*13)*0.5)*0.038,(0.45+sr(i*13+1)*0.35)*0.038,(0.75+sr(i*13+2)*0.5)*0.038]}
-          rotation={[sr(i)*Math.PI, sr(i+1)*Math.PI, 0]}
+          rotation={[sr(i)*Math.PI,sr(i+1)*Math.PI,0]}
         >
           <icosahedronGeometry args={[1,1]} />
           <meshStandardMaterial color={sr(i*13+3)>0.5 ? '#B8B2AA' : '#A8A49C'} roughness={0.88} />
@@ -181,27 +208,31 @@ const STAGE_CFG = {
   contaminated: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
 }
 
-function easeOutBack(t) {
-  const c1 = 1.4, c3 = c1 + 1
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
-}
-
-function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0 }) {
+function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0, lean=0 }) {
   const sh  = 0.095 * scale
   const cr  = 0.088 * scale
   const str = 0.042 * scale
-  const groupRef = useRef()
-  const elapsed  = useRef(0)
+  const ref = useRef()
+  const t   = useRef(0)
+  const cl  = useRef(0)  // current lean (smoothed)
+
+  // Initialize scale to 0 before first paint
+  useLayoutEffect(() => { if (ref.current) ref.current.scale.setScalar(0) }, [])
 
   useFrame((_, dt) => {
-    elapsed.current += dt
-    const t     = Math.max(0, Math.min(1, (elapsed.current - delay) / 1.8))
-    const eased = t < 1 ? easeOutBack(t) : 1
-    if (groupRef.current) groupRef.current.scale.setScalar(Math.max(0, eased))
+    if (!ref.current) return
+    // Growth animation
+    t.current += dt
+    const p = Math.max(0, Math.min(1, (t.current - delay) / 1.8))
+    ref.current.scale.setScalar(Math.max(0, p < 1 ? easeOutBack(p) : 1))
+    // Smooth lean (wilt when hot)
+    cl.current += (lean - cl.current) * Math.min(1, dt * 2)
+    ref.current.rotation.x = cl.current * 0.45
+    ref.current.rotation.y = rotY
   })
 
   return (
-    <group ref={groupRef} position={[px,py,pz]} rotation={[0,rotY,0]} scale={0}>
+    <group ref={ref} position={[px, py, pz]}>
       <mesh position={[0,sh+0.002,0]}>
         <cylinderGeometry args={[cr*0.94,cr*0.94,0.004,9]} />
         <meshStandardMaterial color="#E8D8C8" roughness={0.92} />
@@ -229,8 +260,11 @@ function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots
 
 const CLUSTER_DEFS = [{cx:-0.38,cz:0.08},{cx:0.30,cz:-0.20},{cx:-0.55,cz:-0.30},{cx:0.55,cz:0.28}]
 
-function MushroomBed({ stage }) {
-  const cfg = STAGE_CFG[stage] ?? STAGE_CFG.mature
+function MushroomBed({ stage, tempStress: ts }) {
+  const cfg      = STAGE_CFG[stage] ?? STAGE_CFG.mature
+  const capColor = useMemo(() => stressColor(cfg.cap, ts ?? 0), [cfg.cap, ts])
+  const lean     = Math.pow(Math.max(0, (ts ?? 0) - 0.3) / 0.7, 1.5) * 0.8
+
   const placements = useMemo(() =>
     CLUSTER_DEFS.flatMap(({cx,cz},ci) =>
       Array.from({length:cfg.count},(_,i) => {
@@ -241,7 +275,7 @@ function MushroomBed({ stage }) {
       })
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ,[stage])
+  , [stage])
 
   return (
     <>
@@ -249,9 +283,9 @@ function MushroomBed({ stage }) {
         <ChibiMushroom key={`${stage}-${i}`}
           px={p.px} py={p.py} pz={p.pz}
           scale={p.scale} rotY={p.rotY}
-          capColor={cfg.cap} stemColor={cfg.stem}
+          capColor={capColor} stemColor={cfg.stem}
           spots={cfg.spots && p.scale > cfg.baseScale*0.8}
-          delay={p.delay}
+          delay={p.delay} lean={lean}
         />
       ))}
     </>
@@ -278,7 +312,7 @@ function MiniFan({ active }) {
   const bladesRef = useRef()
   useFrame((_,dt) => { if (bladesRef.current) bladesRef.current.rotation.z += active ? dt*8.5 : 0 })
   return (
-    <group position={[HW-0.04, HH*2-0.12, -HD+0.04]} rotation={[0,-Math.PI*0.25,0]}>
+    <group position={[HW-0.04,HH*2-0.12,-HD+0.04]} rotation={[0,-Math.PI*0.25,0]}>
       <mesh rotation={[Math.PI/2,0,0]}>
         <torusGeometry args={[0.085,0.009,7,16]} />
         <meshStandardMaterial color="#A8B0B2" metalness={0.6} roughness={0.4} />
@@ -293,10 +327,7 @@ function MiniFan({ active }) {
             </mesh>
           )
         })}
-        <mesh>
-          <sphereGeometry args={[0.014,7,7]} />
-          <meshStandardMaterial color="#909898" metalness={0.7} />
-        </mesh>
+        <mesh><sphereGeometry args={[0.014,7,7]}/><meshStandardMaterial color="#909898" metalness={0.7}/></mesh>
       </group>
     </group>
   )
@@ -309,60 +340,150 @@ function MistParticles({ active }) {
   const [pos, spd, drift] = useMemo(() => {
     const p=new Float32Array(N*3), s=new Float32Array(N), d=new Float32Array(N)
     for (let i=0;i<N;i++) {
-      p[i*3]   = (Math.random()-0.5)*(HW*2-0.12)
-      p[i*3+1] = SOIL_H + Math.random()*(HH*2-SOIL_H-0.10)
-      p[i*3+2] = (Math.random()-0.5)*(HD*2-0.12)
-      s[i] = 0.06+Math.random()*0.18
-      d[i] = (Math.random()-0.5)*0.04
+      p[i*3]  =(Math.random()-0.5)*(HW*2-0.12)
+      p[i*3+1]=SOIL_H+Math.random()*(HH*2-SOIL_H-0.10)
+      p[i*3+2]=(Math.random()-0.5)*(HD*2-0.12)
+      s[i]=0.06+Math.random()*0.18
+      d[i]=(Math.random()-0.5)*0.04
+    }
+    return [p,s,d]
+  },[])
+  const attrRef = useRef()
+  useFrame((_,dt) => {
+    if (!attrRef.current||!active) return
+    const a=attrRef.current.array
+    for (let i=0;i<N;i++) {
+      a[i*3]  +=dt*d[i]
+      a[i*3+1]+=dt*s[i]
+      if (a[i*3+1]>HH*2-0.08) a[i*3+1]=SOIL_H+0.05
+    }
+    attrRef.current.needsUpdate=true
+  })
+  return (
+    <points visible={active}>
+      <bufferGeometry>
+        <bufferAttribute ref={attrRef} attach="attributes-position" count={N} array={pos} itemSize={3}/>
+      </bufferGeometry>
+      <pointsMaterial color="#D0E8F8" size={0.016} transparent opacity={0.45} sizeAttenuation depthWrite={false}/>
+    </points>
+  )
+}
+
+// ─── heat shimmer (temp > 33°C) ───────────────────────────────────────────────
+
+function HeatShimmer({ stress }) {
+  const N         = 100
+  const active    = stress > 0.5
+  const intensity = Math.max(0, (stress - 0.5) / 0.5)
+
+  const [pos, spd, drift] = useMemo(() => {
+    const p=new Float32Array(N*3), s=new Float32Array(N), d=new Float32Array(N)
+    for (let i=0;i<N;i++) {
+      p[i*3]  =(Math.random()-0.5)*(HW*2-0.20)
+      p[i*3+1]=SOIL_H+Math.random()*(HH*1.4)
+      p[i*3+2]=(Math.random()-0.5)*(HD*2-0.20)
+      s[i]=0.20+Math.random()*0.30
+      d[i]=(Math.random()-0.5)*0.10
     }
     return [p,s,d]
   },[])
 
   const attrRef = useRef()
   useFrame((_,dt) => {
-    if (!attrRef.current || !active) return
-    const a = attrRef.current.array
+    if (!attrRef.current||!active) return
+    const a=attrRef.current.array
     for (let i=0;i<N;i++) {
-      a[i*3]   += dt*drift[i]
-      a[i*3+1] += dt*spd[i]
-      if (a[i*3+1] > HH*2-0.08) a[i*3+1] = SOIL_H+0.05
+      a[i*3]  +=dt*drift[i]
+      a[i*3+1]+=dt*spd[i]
+      if (a[i*3+1]>SOIL_H+HH*1.4) a[i*3+1]=SOIL_H+0.05
     }
-    attrRef.current.needsUpdate = true
+    attrRef.current.needsUpdate=true
   })
 
   return (
     <points visible={active}>
       <bufferGeometry>
-        <bufferAttribute ref={attrRef} attach="attributes-position" count={N} array={pos} itemSize={3} />
+        <bufferAttribute ref={attrRef} attach="attributes-position" count={N} array={pos} itemSize={3}/>
       </bufferGeometry>
-      <pointsMaterial color="#D0E8F8" size={0.016} transparent opacity={0.45} sizeAttenuation depthWrite={false} />
+      <pointsMaterial color="#F89828" size={0.013} transparent opacity={0.28*intensity} sizeAttenuation depthWrite={false}/>
     </points>
   )
 }
 
-// ─── scene assembly ───────────────────────────────────────────────────────────
+// ─── frost crystals (temp < 18°C) ─────────────────────────────────────────────
+
+function FrostCrystals({ stress }) {
+  const opacity = Math.max(0, Math.min(0.88, (-stress - 0.15) / 0.85 * 0.88))
+  if (opacity <= 0.01) return null
+
+  return (
+    <group position={[0, HH, 0]}>
+      {FROST_POS.map((c, i) => (
+        <group key={i} position={[c.x, c.y, HD+0.006]} rotation={[0,0,c.rot]}>
+          {/* 3 arms = 6-pointed snowflake */}
+          {[0, Math.PI/3, Math.PI*2/3].map((a, j) => (
+            <mesh key={j} rotation={[0,0,a]}>
+              <boxGeometry args={[c.s, c.s*0.10, 0.001]} />
+              <meshStandardMaterial
+                color="#DCF0FF" transparent opacity={opacity}
+                depthWrite={false} emissive="#A8D4F8" emissiveIntensity={0.35}
+              />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// ─── scene content ────────────────────────────────────────────────────────────
 
 function SceneContent({ environment, devices, ai }) {
-  const stage  = ai?.stage ?? null
+  const { scene } = useThree()
+
+  const temp   = environment?.air_temperature ?? 24
+  const hum    = environment?.air_humidity    ?? 80
+  const stage  = ai?.stage   ?? null
   const fanOn  = devices?.fan  === true
   const mistOn = devices?.mist === true
-  const temp   = environment?.temperature ?? 24
 
-  const warmth = Math.min(Math.max((temp-18)/20,0),1)
+  const ts = calcTempStress(temp)
+
+  // Smoothly update fog density (humidity) + color (temperature) each frame
+  useFrame(() => {
+    if (!scene.fog) return
+    const wet  = Math.max(0, Math.min(1, (hum - 55) / 50))
+    const near = 3 + (1 - wet) * 5    // wet→3, dry→8
+    const far  = 9 + (1 - wet) * 9    // wet→9, dry→18
+    scene.fog.near += (near - scene.fog.near) * 0.04
+    scene.fog.far  += (far  - scene.fog.far)  * 0.04
+
+    const fogTarget = ts < -0.3
+      ? new THREE.Color('#C8D8EC')
+      : ts >  0.5
+      ? new THREE.Color('#EDE8DF')
+      : new THREE.Color('#EDF2ED')
+    scene.fog.color.lerp(fogTarget, 0.04)
+  })
+
+  const warmth = Math.max(0, Math.min(1, (temp - 18) / 20))
   const ambCol = new THREE.Color(0.96+warmth*0.04, 0.97-warmth*0.03, 1.00-warmth*0.10)
+  const bgCol  = ts < -0.3 ? '#E0EAF5' : ts > 0.6 ? '#F5EDE5' : '#EDF2ED'
 
   return (
     <>
-      <color attach="background" args={['#EDF2ED']} />
-      <fog attach="fog" color="#EDF2ED" near={6} far={16} />
+      <color attach="background" args={[bgCol]} />
+      <fog attach="fog" color="#EDF2ED" near={5} far={14} />
+
       <ambientLight color={ambCol} intensity={0.62} />
-      <directionalLight position={[3,6,4]} intensity={0.7} castShadow shadow-mapSize={[1024,1024]} shadow-camera-far={14} />
-      <pointLight position={[-2,3,-1]} intensity={0.3} color="#F0F4FF" />
-      <OrbitControls target={[0,HH,0]} minDistance={1.8} maxDistance={5.5} maxPolarAngle={Math.PI*0.76} enablePan={false} />
+      <directionalLight position={[3,6,4]} intensity={0.7} castShadow shadow-mapSize={[1024,1024]} shadow-camera-far={14}/>
+      <pointLight position={[-2,3,-1]} intensity={0.3} color="#F0F4FF"/>
+
+      <OrbitControls target={[0,HH,0]} minDistance={1.8} maxDistance={5.5} maxPolarAngle={Math.PI*0.76} enablePan={false}/>
 
       <mesh position={[0,-0.022,0]} receiveShadow>
-        <boxGeometry args={[3.2,0.04,2.6]} />
-        <meshStandardMaterial color="#E6E0D8" roughness={0.82} />
+        <boxGeometry args={[3.2,0.04,2.6]}/>
+        <meshStandardMaterial color="#E6E0D8" roughness={0.82}/>
       </mesh>
 
       <TerrariumBase />
@@ -371,13 +492,17 @@ function SceneContent({ environment, devices, ai }) {
       <MossPatches />
       <GrassTufts />
       <Pebbles />
-      <MushroomBed stage={stage} />
+      <MushroomBed stage={stage} tempStress={ts} />
       <GrowLight />
       <MiniFan active={fanOn} />
       <MistParticles active={mistOn} />
+      <HeatShimmer stress={ts} />
+      <FrostCrystals stress={ts} />
     </>
   )
 }
+
+// ─── export ───────────────────────────────────────────────────────────────────
 
 export function Scene({ environment, devices, ai }) {
   return (
