@@ -6,7 +6,7 @@ import { create } from 'zustand'
  */
 export const useGreenhouseStore = create((set) => ({
   // ── Latest state ────────────────────────────────────────────────────
-  environment:  null,   // { temperature, humidity }
+  environment:  null,   // { air_temperature, air_humidity, soil_moisture, timestamp }
   devices:      null,   // { fan, mist }
   ai:           null,   // { stage, confidence }
   lastUpdated:  null,   // ISO string
@@ -29,11 +29,12 @@ export const useGreenhouseStore = create((set) => ({
       }
 
       // Append to history if we got fresh data
+      // environment already carries its own timestamp from the device firmware
       const ts = payload.last_updated
       return {
         ...next,
         envHistory: payload.environment
-          ? [...state.envHistory.slice(-199), { ...payload.environment, timestamp: ts }]
+          ? [...state.envHistory.slice(-199), payload.environment]
           : state.envHistory,
         devHistory: payload.devices
           ? [...state.devHistory.slice(-199), { ...payload.devices, timestamp: ts }]
