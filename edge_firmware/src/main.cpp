@@ -125,6 +125,9 @@ void setup() {
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  LOOP
+// ═════════════════════════════════════════════════════════════════════════════
 void loop() {
     if (!mqttClient.connected()) {
         reconnectMQTT();
