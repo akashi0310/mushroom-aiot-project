@@ -1,205 +1,193 @@
 #include <Arduino.h>
+#include "config.h"
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiClient.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
 #include <time.h>
 
-// ─── WiFi Configuration ─────────────────────────────────────────────────────
-const char* WIFI_SSID     = "D2411";
-const char* WIFI_PASSWORD = "24267872";
-
-// ─── MQTT Configuration ─────────────────────────────────────────────────────
-const char* MQTT_BROKER = "broker.emqx.io";
-const int   MQTT_PORT   = 1883;
-const char* MQTT_TOPIC  = "mushroom-farm/rack-1/environment";
-const char* MQTT_CLIENT_ID_PREFIX = "esp8266-mushroom-";
-
-// ─── Sensor Pins ─────────────────────────────────────────────────────────────
-#define DHTPIN    D4          // DHT11 data pin → GPIO2 (D4 on NodeMCU)
-#define DHTTYPE   DHT11
-#define SOIL_PIN  A0          // HW-080 analog output → A0
-
-// ─── Timing ──────────────────────────────────────────────────────────────────
-const unsigned long SEND_INTERVAL_MS = 4000;  // 4 seconds
-unsigned long lastSendTime = 0;
-
-// ─── NTP Configuration (for Unix timestamp) ──────────────────────────────────
-const char* NTP_SERVER = "pool.ntp.org";
-const long  GMT_OFFSET = 7 * 3600;   // UTC+7 (Vietnam)
-const int   DST_OFFSET = 0;
-
-// ─── Objects ─────────────────────────────────────────────────────────────────
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
-// ─── Function Declarations ───────────────────────────────────────────────────
-void connectWiFi();
-void connectMQTT();
-float readSoilMoisture();
-void publishSensorData();
+struct SensorData {
+    time_t timestamp;
+    float air_temperature;
+    float air_humidity;
+    float soil_moisture;
+};
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  SETUP
-// ═════════════════════════════════════════════════════════════════════════════
+SensorData dataCache[MAX_CACHE_SIZE];
+int cacheCount = 0;
+unsigned long lastSampleTime = 0;
+
+void syncNTPTime() {
+    Serial.println("[NTP] Synchronizing real time...");
+    configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+    time_t now = time(nullptr);
+    while (now < 8 * 3600 * 2) { 
+        delay(500);
+        Serial.print(".");
+        now = time(nullptr);
+    }
+    Serial.println("\n[NTP] Synchronization complete!");
+}
+
+void connectToWiFi() {
+    if (WiFi.status() == WL_CONNECTED) return;
+    Serial.print("[NETWORK] Connecting to Wi-Fi: ");
+    Serial.println(WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
+    int attempt = 0;
+    while (WiFi.status() != WL_CONNECTED && attempt < 30) {
+        delay(500);
+        Serial.print(".");
+        attempt++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\n[NETWORK] Wi-Fi connected!");
+    }
+}
+
+void reconnectMQTT() {
+        while (!mqttClient.connected()) {
+        if (WiFi.status() != WL_CONNECTED) {
+            connectToWiFi();
+        }
+        Serial.print("[MQTT] Connecting to Broker...");
+        String clientId = "ESP8266Client-" + String(random(0, 0xffff), HEX);
+        
+        #if defined(MQTT_USER) && defined(MQTT_PASSWORD)
+        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
+        #else
+        if (mqttClient.connect(clientId.c_str())) {
+        #endif
+            Serial.println("Connected!");
+        } else {
+            Serial.print("Failed, rc=");
+            Serial.print(mqttClient.state());
+            Serial.println(" Trying again in 5 seconds...");
+            delay(5000);
+        }
+    }
+}
+
+
+bool sendBatchData(SensorData* dataArray, int count) {
+    if (!mqttClient.connected()) {
+        reconnectMQTT();
+    }
+
+    JsonDocument doc;
+    JsonArray array = doc.to<JsonArray>();
+
+    for (int i = 0; i < count; i++) {
+        JsonObject obj = array.add<JsonObject>();
+        obj["timestamp"] = dataArray[i].timestamp;
+        obj["air_temperature"] = dataArray[i].air_temperature;
+        obj["air_humidity"] = dataArray[i].air_humidity;
+        obj["soil_moisture"] = dataArray[i].soil_moisture;
+    }
+
+    String jsonPayload;
+    serializeJson(doc, jsonPayload);
+
+    bool success = mqttClient.publish(TOPIC_AI, jsonPayload.c_str());
+    
+    if (success) {
+        Serial.println("[MQTT] Data published to Broker successfully.");
+    } else {
+        Serial.println("[MQTT] Failed to publish data.");
+    }
+
+    return success;
+}
+
 void setup() {
-  Serial.begin(115200);
-  delay(100);
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("  Mushroom Farm - Sensor Node (ESP8266)");
-  Serial.println("========================================");
+    pinMode(SOIL_POWER_PIN, OUTPUT);
+    digitalWrite(SOIL_POWER_PIN, LOW);
+    
+    pinMode(DHTPIN, INPUT_PULLUP);
 
-  // Initialize DHT11
-  dht.begin();
-  Serial.println("[SENSOR] DHT11 initialized on pin D4");
+    Serial.begin(9600);
+    delay(1000); 
+    
+    dht.begin();
 
-  // Initialize soil moisture pin
-  pinMode(SOIL_PIN, INPUT);
-  Serial.println("[SENSOR] HW-080 soil moisture on pin A0");
+    connectToWiFi();
+    if (WiFi.status() == WL_CONNECTED) {
+        syncNTPTime();
+    }
 
-  // Connect to WiFi
-  connectWiFi();
-
-  // Configure NTP for Unix timestamps
-  configTime(GMT_OFFSET, DST_OFFSET, NTP_SERVER);
-  Serial.println("[NTP] Waiting for time sync...");
-  while (time(nullptr) < 100000) {
-    delay(200);
-    Serial.print(".");
-  }
-  Serial.println("\n[NTP] Time synchronized!");
-
-  // Configure MQTT
-  mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
-  connectMQTT();
+    mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  LOOP
 // ═════════════════════════════════════════════════════════════════════════════
 void loop() {
-  // Ensure WiFi is connected
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WIFI] Connection lost! Reconnecting...");
-    connectWiFi();
-  }
-
-  // Ensure MQTT is connected
-  if (!mqttClient.connected()) {
-    connectMQTT();
-  }
-  mqttClient.loop();
-
-  // Publish sensor data at interval
-  unsigned long now = millis();
-  if (now - lastSendTime >= SEND_INTERVAL_MS) {
-    lastSendTime = now;
-    publishSensorData();
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  WiFi Connection
-// ═════════════════════════════════════════════════════════════════════════════
-void connectWiFi() {
-  Serial.printf("[WIFI] Connecting to %s", WIFI_SSID);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
-  } else {
-    Serial.println();
-    Serial.println("[WIFI] Failed to connect. Restarting...");
-    ESP.restart();
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  MQTT Connection
-// ═════════════════════════════════════════════════════════════════════════════
-void connectMQTT() {
-  // Generate unique client ID
-  String clientId = MQTT_CLIENT_ID_PREFIX + String(ESP.getChipId(), HEX);
-
-  while (!mqttClient.connected()) {
-    Serial.printf("[MQTT] Connecting to %s:%d ...\n", MQTT_BROKER, MQTT_PORT);
-
-    if (mqttClient.connect(clientId.c_str())) {
-      Serial.println("[MQTT] Connected!");
-      Serial.printf("[MQTT] Publishing to: %s\n", MQTT_TOPIC);
-    } else {
-      Serial.printf("[MQTT] Failed, rc=%d. Retrying in 3s...\n", mqttClient.state());
-      delay(3000);
+    if (!mqttClient.connected()) {
+        reconnectMQTT();
     }
-  }
-}
+    mqttClient.loop();
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Read Soil Moisture (HW-080)
-// ═════════════════════════════════════════════════════════════════════════════
-float readSoilMoisture() {
-  // HW-080 on ESP8266 A0: 0-1023
-  // Dry soil → high analog value (~1023)
-  // Wet soil → low analog value (~0)
-  int rawValue = analogRead(SOIL_PIN);
+    unsigned long currentMillis = millis();
 
-  // Convert to percentage: 0% = dry, 100% = wet
-  float moisture = 100.0 - (rawValue / 1023.0 * 100.0);
+    if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL) {
+        lastSampleTime = currentMillis;
 
-  // Clamp to valid range
-  if (moisture < 0.0) moisture = 0.0;
-  if (moisture > 100.0) moisture = 100.0;
+        // Force power to stay on to stabilize voltage for testing
+        digitalWrite(SOIL_POWER_PIN, HIGH); 
+        delay(200); // Give it a longer delay to settle completely
 
-  return moisture;
-}
+        int rawSoil = analogRead(SOIL_ANALOG_PIN);
 
-// ═════════════════════════════════════════════════════════════════════════════
-//  Publish Sensor Data via MQTT
-// ═════════════════════════════════════════════════════════════════════════════
-void publishSensorData() {
-  // Read DHT11
-  float temperature = dht.readTemperature();    // °C
-  float humidity    = dht.readHumidity();        // %
+        float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
+        if(soilMoisture > 100) soilMoisture = 100;
+        if(soilMoisture < 0) soilMoisture = 0;
 
-  // Validate DHT11 readings
-  if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("[SENSOR] DHT11 read failed! Skipping this cycle.");
-    return;
-  }
+        float air_h = dht.readHumidity();
+        float air_t = dht.readTemperature();
 
-  // Read soil moisture
-  float soilMoisture = readSoilMoisture();
+        if (isnan(air_h) || isnan(air_t)) {
+            Serial.println("[ERROR] Failed to read data from DHT11 sensor on pin D4!");
+            return;
+        }
 
-  // Get Unix timestamp
-  time_t timestamp = time(nullptr);
+        time_t now = time(nullptr);
+        Serial.printf("[ENVIRONMENT] Air: %.1f°C - %.1f%% | Soil: %.1f%%\n", air_t, air_h, soilMoisture);
 
-  // Build JSON payload matching backend EnvironmentPayload schema:
-  // { "timestamp": <unix_epoch>, "air_temperature": <float>,
-  //   "air_humidity": <float>, "soil_moisture": <float> }
-  JsonDocument doc;
-  doc["timestamp"]       = (unsigned long)timestamp;
-  doc["air_temperature"] = round(temperature * 10.0) / 10.0;  // 1 decimal
-  doc["air_humidity"]    = round(humidity * 10.0) / 10.0;
-  doc["soil_moisture"]   = round(soilMoisture * 10.0) / 10.0;
+        if (cacheCount < MAX_CACHE_SIZE) {
+            dataCache[cacheCount].timestamp = now;
+            dataCache[cacheCount].air_temperature = air_t;
+            dataCache[cacheCount].air_humidity = air_h;
+            dataCache[cacheCount].soil_moisture = soilMoisture;
+            cacheCount++;
+        } else {
+            for (int i = 1; i < MAX_CACHE_SIZE; i++) {
+                dataCache[i - 1] = dataCache[i];
+            }
+            dataCache[MAX_CACHE_SIZE - 1].timestamp = now;
+            dataCache[MAX_CACHE_SIZE - 1].air_temperature = air_t;
+            dataCache[MAX_CACHE_SIZE - 1].air_humidity = air_h;
+            dataCache[MAX_CACHE_SIZE - 1].soil_moisture = soilMoisture;
+        }
 
-  char payload[256];
-  serializeJson(doc, payload, sizeof(payload));
+        if (WiFi.status() != WL_CONNECTED) {
+            connectToWiFi();
+        } else {
+            if (now < 8 * 3600 * 2) {
+                syncNTPTime();
+            }
 
-  // Publish
-  if (mqttClient.publish(MQTT_TOPIC, payload)) {
-    Serial.printf("[MQTT] Published: %s\n", payload);
-  } else {
-    Serial.println("[MQTT] Publish failed!");
-  }
+            if (cacheCount > 0) {
+                if (sendBatchData(dataCache, cacheCount)) {
+                    cacheCount = 0;
+                }
+            }
+        }
+    }
 }
