@@ -7,6 +7,8 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
+#include "plant_classifier.h" 
+
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
@@ -145,6 +147,20 @@ void loop() {
             Serial.println("[ERROR] Failed to read DHT11 sensor!");
             return;
         }
+
+        HealthStatus status = classifyPlantHealth(
+            air_t,
+            air_h,
+            soilMoisture
+        );
+
+        Serial.printf(
+            "[ENV] %.1f°C  %.1f%%  soil:%.1f%%  => %s\n",
+            air_t,
+            air_h,
+            soilMoisture,
+            HEALTH_NAMES[status]
+        );
 
         time_t now = time(nullptr);
         Serial.printf("[ENV] %.1f°C  %.1f%%  soil:%.1f%%\n", air_t, air_h, soilMoisture);
