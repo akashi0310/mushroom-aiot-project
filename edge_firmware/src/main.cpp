@@ -91,37 +91,28 @@ void reconnectMQTT()
     }
 }
 
-bool sendBatchData(SensorData *dataArray, int count)
-{
-    if (!mqttClient.connected())
-    {
+bool flushCache(SensorData* dataArray, int count) {
+    if (!mqttClient.connected()) {
         reconnectMQTT();
     }
 
-    JsonDocument doc;
-    JsonArray array = doc.to<JsonArray>();
-
-    for (int i = 0; i < count; i++)
-    {
-        JsonObject obj = array.add<JsonObject>();
-        obj["timestamp"] = dataArray[i].timestamp;
-        obj["air_temperature"] = dataArray[i].air_temperature;
-        obj["air_humidity"] = dataArray[i].air_humidity;
-        obj["soil_moisture"] = dataArray[i].soil_moisture;
-    }
+    bool allOk = true;
+    for (int i = 0; i < count; i++) {
+        JsonDocument doc;
+        doc["timestamp"]       = dataArray[i].timestamp;
+        doc["air_temperature"] = dataArray[i].air_temperature;
+        doc["air_humidity"]    = dataArray[i].air_humidity;
+        doc["soil_moisture"]   = dataArray[i].soil_moisture;
 
         String payload;
         serializeJson(doc, payload);
 
-    bool success = mqttClient.publish(TOPIC_AI, jsonPayload.c_str());
-
-    if (success)
-    {
-        Serial.println("[MQTT] Data published to Broker successfully.");
-    }
-    else
-    {
-        Serial.println("[MQTT] Failed to publish data.");
+        if (mqttClient.publish(TOPIC_ENV, payload.c_str())) {
+            Serial.printf("[MQTT] Published: %s\n", payload.c_str());
+        } else {
+            Serial.println("[MQTT] Publish failed.");
+            allOk = false;
+        }
     }
     return allOk;
 }
