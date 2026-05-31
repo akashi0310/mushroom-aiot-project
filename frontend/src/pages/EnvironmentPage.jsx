@@ -75,19 +75,25 @@ export function EnvironmentPage() {
   const { data, history } = useEnvironment()
 
   const chartData = history.slice(-60).map((r) => ({
-    time:        new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    temperature: r.temperature,
-    humidity:    r.humidity,
+    time:         new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    air_temperature: r.air_temperature,
+    air_humidity:    r.air_humidity,
+    soil_moisture:   r.soil_moisture,
   }))
 
   const tempColor = !data ? '#1A261A'
-    : data.temperature > 30 ? '#DC2626'
-    : data.temperature < 22 ? '#0891B2'
+    : data.air_temperature > 30 ? '#DC2626'
+    : data.air_temperature < 22 ? '#0891B2'
     : '#16A34A'
 
   const humColor = !data ? '#1A261A'
-    : data.humidity < 70 ? '#D97706'
+    : data.air_humidity < 70 ? '#D97706'
     : '#0891B2'
+
+  const soilColor = !data ? '#1A261A'
+    : data.soil_moisture < 40 ? '#D97706'
+    : data.soil_moisture > 85 ? '#0891B2'
+    : '#16A34A'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -95,10 +101,11 @@ export function EnvironmentPage() {
       <main style={{ flex: 1, padding: 24, overflowY: 'auto', background: '#F5F6F8' }}>
 
         {/* current readings */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
           {[
-            { label: 'temperature', value: data?.temperature?.toFixed(1), unit: '°C', color: tempColor },
-            { label: 'humidity',    value: data?.humidity?.toFixed(1),    unit: '%',  color: humColor  },
+            { label: 'air_temperature', value: data?.air_temperature?.toFixed(1), unit: '°C', color: tempColor },
+            { label: 'air_humidity',    value: data?.air_humidity?.toFixed(1),    unit: '%',  color: humColor  },
+            { label: 'soil_moisture',   value: data?.soil_moisture?.toFixed(1),   unit: '%',  color: soilColor },
           ].map(({ label, value, unit, color }) => (
             <div key={label} style={{ ...CARD, padding: '18px 24px' }}>
               <p style={{
@@ -134,10 +141,12 @@ export function EnvironmentPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <ChartPanel title="temperature" dataKey="temperature" data={chartData}
+            <ChartPanel title="air_temperature" dataKey="air_temperature" data={chartData}
               color="#DC2626" unit="°" domain={[15, 40]} />
-            <ChartPanel title="humidity" dataKey="humidity" data={chartData}
+            <ChartPanel title="air_humidity" dataKey="air_humidity" data={chartData}
               color="#0891B2" unit="%" domain={[40, 100]} />
+            <ChartPanel title="soil_moisture" dataKey="soil_moisture" data={chartData}
+              color="#16A34A" unit="%" domain={[0, 100]} />
           </div>
         )}
 
@@ -160,7 +169,7 @@ export function EnvironmentPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead style={{ position: 'sticky', top: 0, background: '#FAFBFC', zIndex: 1 }}>
                 <tr style={{ borderBottom: '1px solid #EAEDEA' }}>
-                  {['timestamp', 'temp (°C)', 'humidity (%)'].map((h, i) => (
+                  {['timestamp', 'temp (°C)', 'humidity (%)', 'soil (%)'].map((h, i) => (
                     <th key={h} style={{
                       padding: '8px 16px',
                       fontFamily: "'JetBrains Mono',monospace",
@@ -182,16 +191,19 @@ export function EnvironmentPage() {
                       {new Date(r.timestamp).toLocaleTimeString()}
                     </td>
                     <td style={{ padding: '7px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#1A261A', textAlign: 'right' }}>
-                      {r.temperature?.toFixed(1)}
+                      {r.air_temperature?.toFixed(1)}
                     </td>
                     <td style={{ padding: '7px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#1A261A', textAlign: 'right' }}>
-                      {r.humidity?.toFixed(1)}
+                      {r.air_humidity?.toFixed(1)}
+                    </td>
+                    <td style={{ padding: '7px 16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#1A261A', textAlign: 'right' }}>
+                      {r.soil_moisture?.toFixed(1)}
                     </td>
                   </tr>
                 ))}
                 {history.length === 0 && (
                   <tr>
-                    <td colSpan={3} style={{ padding: '24px 16px', textAlign: 'center', color: '#C0D0C0', fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>
+                    <td colSpan={4} style={{ padding: '24px 16px', textAlign: 'center', color: '#C0D0C0', fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>
                       no_data_yet
                     </td>
                   </tr>

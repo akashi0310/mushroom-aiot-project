@@ -12,9 +12,8 @@ async def broadcast_state() -> None:
 
 
 @sio.event
-async def connect(sid: str, environ: dict):
+async def connect(sid: str, environ: dict, auth=None):
     print(f"[WS] Client connected: {sid}")
-    # Send current state immediately on connect
     await sio.emit("state", store.to_state_dict(), to=sid)
 
 

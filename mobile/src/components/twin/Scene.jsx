@@ -1,5 +1,5 @@
 import { useRef, useMemo, Suspense, useLayoutEffect } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber/native'
 import { OrbitControls, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -16,14 +16,12 @@ function tH(x, z) {
     + Math.cos(x*5.9-z*5.2)*0.021
 }
 
-// -1 (extreme cold 12°C) → 0 (optimal 22–28°C) → +1 (extreme hot 38°C)
 function calcTempStress(temp) {
   if (temp <= 22) return Math.max(-1, (temp - 22) / 10)
   if (temp >= 28) return Math.min( 1, (temp - 28) / 10)
   return 0
 }
 
-// Shift cap color based on temperature stress
 function stressColor(hex, ts) {
   const c = new THREE.Color(hex)
   if (ts < 0)    return '#' + c.lerp(new THREE.Color('#B8D4F8'), Math.min(1, -ts * 0.85)).getHexString()
@@ -214,18 +212,15 @@ function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots
   const str = 0.042 * scale
   const ref = useRef()
   const t   = useRef(0)
-  const cl  = useRef(0)  // current lean (smoothed)
+  const cl  = useRef(0)
 
-  // Initialize scale to 0 before first paint
   useLayoutEffect(() => { if (ref.current) ref.current.scale.setScalar(0) }, [])
 
   useFrame((_, dt) => {
     if (!ref.current) return
-    // Growth animation
     t.current += dt
     const p = Math.max(0, Math.min(1, (t.current - delay) / 1.8))
     ref.current.scale.setScalar(Math.max(0, p < 1 ? easeOutBack(p) : 1))
-    // Smooth lean (wilt when hot)
     cl.current += (lean - cl.current) * Math.min(1, dt * 2)
     ref.current.rotation.x = cl.current * 0.45
     ref.current.rotation.y = rotY
@@ -369,13 +364,12 @@ function MistParticles({ active }) {
   )
 }
 
-// ─── heat shimmer (temp > 33°C) ───────────────────────────────────────────────
+// ─── heat shimmer ─────────────────────────────────────────────────────────────
 
 function HeatShimmer({ stress }) {
-  const N         = 100
-  const active    = stress > 0.5
+  const N      = 100
+  const active = stress > 0.5
   const intensity = Math.max(0, (stress - 0.5) / 0.5)
-
   const [pos, spd, drift] = useMemo(() => {
     const p=new Float32Array(N*3), s=new Float32Array(N), d=new Float32Array(N)
     for (let i=0;i<N;i++) {
@@ -387,7 +381,6 @@ function HeatShimmer({ stress }) {
     }
     return [p,s,d]
   },[])
-
   const attrRef = useRef()
   useFrame((_,dt) => {
     if (!attrRef.current||!active) return
@@ -399,7 +392,6 @@ function HeatShimmer({ stress }) {
     }
     attrRef.current.needsUpdate=true
   })
-
   return (
     <points visible={active}>
       <bufferGeometry>
@@ -410,24 +402,19 @@ function HeatShimmer({ stress }) {
   )
 }
 
-// ─── frost crystals (temp < 18°C) ─────────────────────────────────────────────
+// ─── frost crystals ───────────────────────────────────────────────────────────
 
 function FrostCrystals({ stress }) {
   const opacity = Math.max(0, Math.min(0.88, (-stress - 0.15) / 0.85 * 0.88))
   if (opacity <= 0.01) return null
-
   return (
     <group position={[0, HH, 0]}>
       {FROST_POS.map((c, i) => (
         <group key={i} position={[c.x, c.y, HD+0.006]} rotation={[0,0,c.rot]}>
-          {/* 3 arms = 6-pointed snowflake */}
           {[0, Math.PI/3, Math.PI*2/3].map((a, j) => (
             <mesh key={j} rotation={[0,0,a]}>
               <boxGeometry args={[c.s, c.s*0.10, 0.001]} />
-              <meshStandardMaterial
-                color="#DCF0FF" transparent opacity={opacity}
-                depthWrite={false} emissive="#A8D4F8" emissiveIntensity={0.35}
-              />
+              <meshStandardMaterial color="#DCF0FF" transparent opacity={opacity} depthWrite={false} emissive="#A8D4F8" emissiveIntensity={0.35} />
             </mesh>
           ))}
         </group>
@@ -441,28 +428,21 @@ function FrostCrystals({ stress }) {
 function SceneContent({ environment, devices, ai }) {
   const { scene } = useThree()
 
-  const temp   = environment?.air_temperature ?? 24
-  const hum    = environment?.air_humidity    ?? 80
-  const stage  = ai?.stage   ?? null
-  const fanOn  = devices?.fan  === true
-  const mistOn = devices?.mist === true
+  const temp  = environment?.air_temperature ?? 24
+  const hum   = environment?.air_humidity    ?? 80
+  const stage = ai?.stage   ?? null
+  const fanOn = devices?.fan  === true
+  const mistOn= devices?.mist === true
+  const ts    = calcTempStress(temp)
 
-  const ts = calcTempStress(temp)
-
-  // Smoothly update fog density (humidity) + color (temperature) each frame
   useFrame(() => {
     if (!scene.fog) return
     const wet  = Math.max(0, Math.min(1, (hum - 55) / 50))
-    const near = 3 + (1 - wet) * 5    // wet→3, dry→8
-    const far  = 9 + (1 - wet) * 9    // wet→9, dry→18
+    const near = 3 + (1 - wet) * 5
+    const far  = 9 + (1 - wet) * 9
     scene.fog.near += (near - scene.fog.near) * 0.04
     scene.fog.far  += (far  - scene.fog.far)  * 0.04
-
-    const fogTarget = ts < -0.3
-      ? new THREE.Color('#C8D8EC')
-      : ts >  0.5
-      ? new THREE.Color('#EDE8DF')
-      : new THREE.Color('#EDF2ED')
+    const fogTarget = ts < -0.3 ? new THREE.Color('#C8D8EC') : ts > 0.5 ? new THREE.Color('#EDE8DF') : new THREE.Color('#EDF2ED')
     scene.fog.color.lerp(fogTarget, 0.04)
   })
 
@@ -474,18 +454,14 @@ function SceneContent({ environment, devices, ai }) {
     <>
       <color attach="background" args={[bgCol]} />
       <fog attach="fog" color="#EDF2ED" near={5} far={14} />
-
       <ambientLight color={ambCol} intensity={0.62} />
       <directionalLight position={[3,6,4]} intensity={0.7} castShadow shadow-mapSize={[1024,1024]} shadow-camera-far={14}/>
       <pointLight position={[-2,3,-1]} intensity={0.3} color="#F0F4FF"/>
-
       <OrbitControls target={[0,HH,0]} minDistance={1.8} maxDistance={5.5} maxPolarAngle={Math.PI*0.76} enablePan={false}/>
-
       <mesh position={[0,-0.022,0]} receiveShadow>
         <boxGeometry args={[3.2,0.04,2.6]}/>
         <meshStandardMaterial color="#E6E0D8" roughness={0.82}/>
       </mesh>
-
       <TerrariumBase />
       <TerrariumGlass />
       <Terrain />
@@ -506,7 +482,7 @@ function SceneContent({ environment, devices, ai }) {
 
 export function Scene({ environment, devices, ai }) {
   return (
-    <Canvas camera={{ position:[2.6,2.2,3.0], fov:40 }} shadows style={{ width:'100%', height:'100%' }}>
+    <Canvas camera={{ position:[2.6,2.2,3.0], fov:40 }} shadows style={{ flex: 1 }}>
       <Suspense fallback={null}>
         <SceneContent environment={environment} devices={devices} ai={ai} />
       </Suspense>

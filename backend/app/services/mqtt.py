@@ -1,5 +1,6 @@
 import asyncio
 import json
+import ssl
 import threading
 import time
 from datetime import datetime, timezone
@@ -88,6 +89,13 @@ def _run_mqtt():
     client.on_connect    = _on_connect
     client.on_disconnect = _on_disconnect
     client.on_message    = _on_message
+
+    if settings.mqtt_username:
+        client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
+
+    if settings.mqtt_port == 8883:
+        ca = settings.mqtt_ca_cert or None
+        client.tls_set(ca_certs=ca, cert_reqs=ssl.CERT_REQUIRED)
 
     print(f"[MQTT] Connecting to {settings.mqtt_broker}:{settings.mqtt_port} ...")
     client.connect(settings.mqtt_broker, settings.mqtt_port, keepalive=60)

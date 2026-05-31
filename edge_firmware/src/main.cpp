@@ -1,14 +1,14 @@
 #include <Arduino.h>
 #include "config.h"
 #include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <WiFiClient.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
 #include <time.h>
 
 DHT dht(DHTPIN, DHTTYPE);
-WiFiClient espClient;
+WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
 struct SensorData
@@ -83,7 +83,7 @@ void reconnectMQTT()
         {
             Serial.print("Failed, rc=");
             Serial.print(mqttClient.state());
-            Serial.println(" Trying again in 5 seconds...");
+            Serial.println(" retrying in 5s...");
             delay(5000);
         }
     }
@@ -108,8 +108,8 @@ bool sendBatchData(SensorData *dataArray, int count)
         obj["soil_moisture"] = dataArray[i].soil_moisture;
     }
 
-    String jsonPayload;
-    serializeJson(doc, jsonPayload);
+        String payload;
+        serializeJson(doc, payload);
 
     bool success = mqttClient.publish(TOPIC_AI, jsonPayload.c_str());
 
@@ -121,21 +121,13 @@ bool sendBatchData(SensorData *dataArray, int count)
     {
         Serial.println("[MQTT] Failed to publish data.");
     }
-
-    return success;
+    return allOk;
 }
 
 void setup()
 {
     pinMode(SOIL_POWER_PIN, OUTPUT);
     digitalWrite(SOIL_POWER_PIN, LOW);
-    pinMode(RELAY_PIN, OUTPUT);
-    pinMode(RELAY_FAN, OUTPUT);
-
-    // relay OFF initially
-    digitalWrite(RELAY_PIN, HIGH);
-    digitalWrite(RELAY_FAN, HIGH);
-
     pinMode(DHTPIN, INPUT_PULLUP);
 
     Serial.begin(9600);
@@ -148,6 +140,10 @@ void setup()
     {
         syncNTPTime();
     }
+
+    // TLS encrypted but skip certificate verification
+    // (ESP8266 BearSSL can't easily load CA cert at runtime)
+    espClient.setInsecure();
 
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
@@ -166,77 +162,40 @@ void loop()
     {
         lastSampleTime = currentMillis;
 
-        // Force power to stay on to stabilize voltage for testing
         digitalWrite(SOIL_POWER_PIN, HIGH);
-        delay(200); // Give it a longer delay to settle completely
+        delay(200);
 
         int rawSoil = analogRead(SOIL_ANALOG_PIN);
-
         float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
-        if (soilMoisture > 100)
-            soilMoisture = 100;
-        if (soilMoisture < 0)
-            soilMoisture = 0;
+        if (soilMoisture > 100) soilMoisture = 100;
+        if (soilMoisture < 0)   soilMoisture = 0;
 
         float air_h = dht.readHumidity();
         float air_t = dht.readTemperature();
 
-        if (isnan(air_h) || isnan(air_t))
-        {
-            Serial.println("[ERROR] Failed to read data from DHT11 sensor on pin D4!");
+        if (isnan(air_h) || isnan(air_t)) {
+            Serial.println("[ERROR] Failed to read DHT11 sensor!");
             return;
         }
 
         time_t now = time(nullptr);
-        Serial.printf("[ENVIRONMENT] Air: %.1f°C - %.1f%% | Soil: %.1f%%\n", air_t, air_h, soilMoisture);
+        Serial.printf("[ENV] %.1f°C  %.1f%%  soil:%.1f%%\n", air_t, air_h, soilMoisture);
 
-        // Relay + Pump + Fan
-        digitalWrite(RELAY_PIN, LOW);  // pump ON
-        digitalWrite(RELAY_FAN, HIGH); // fan ON
-        Serial.println("SWITCH ON");
-        delay(2000);
-        digitalWrite(RELAY_PIN, HIGH); // pump OFF
-        digitalWrite(RELAY_FAN, LOW);  // fan OFF
-        Serial.println("SWITCH OFF");
-        delay(2000);
-
-        if (cacheCount < MAX_CACHE_SIZE)
-        {
-            dataCache[cacheCount].timestamp = now;
-            dataCache[cacheCount].air_temperature = air_t;
-            dataCache[cacheCount].air_humidity = air_h;
-            dataCache[cacheCount].soil_moisture = soilMoisture;
-            cacheCount++;
-        }
-        else
-        {
-            for (int i = 1; i < MAX_CACHE_SIZE; i++)
-            {
-                dataCache[i - 1] = dataCache[i];
-            }
-            dataCache[MAX_CACHE_SIZE - 1].timestamp = now;
-            dataCache[MAX_CACHE_SIZE - 1].air_temperature = air_t;
-            dataCache[MAX_CACHE_SIZE - 1].air_humidity = air_h;
-            dataCache[MAX_CACHE_SIZE - 1].soil_moisture = soilMoisture;
+        if (cacheCount < MAX_CACHE_SIZE) {
+            dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture };
+        } else {
+            for (int i = 1; i < MAX_CACHE_SIZE; i++) dataCache[i - 1] = dataCache[i];
+            dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture };
         }
 
         if (WiFi.status() != WL_CONNECTED)
         {
             connectToWiFi();
-        }
-        else
-        {
-            if (now < 8 * 3600 * 2)
-            {
-                syncNTPTime();
-            }
+        } else {
+            if (now < 8 * 3600 * 2) syncNTPTime();
 
-            if (cacheCount > 0)
-            {
-                if (sendBatchData(dataCache, cacheCount))
-                {
-                    cacheCount = 0;
-                }
+            if (cacheCount > 0 && flushCache(dataCache, cacheCount)) {
+                cacheCount = 0;
             }
         }
     }

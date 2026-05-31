@@ -9,7 +9,6 @@ from app.models.enums import AIStage, MQTTStatus
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
 
 class EnvironmentPayload(BaseModel):
-    """Matches firmware SensorData struct — timestamp is Unix epoch from device."""
     timestamp:       datetime
     air_temperature: float = Field(..., ge=-20, le=80,  description="°C")
     air_humidity:    float = Field(..., ge=0,   le=100, description="%")

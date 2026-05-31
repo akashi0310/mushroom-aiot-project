@@ -41,7 +41,7 @@ React pages/components
 - **Socket lifecycle**: `useSocket()` hook (called once in `App.jsx`) creates the singleton Socket.IO connection, fetches REST history to pre-fill charts, then wires all `"state"` events to the store.
 - **Selectors**: `useGreenhouseData.js` exports fine-grained selector hooks so components only re-render on the slice they need.
 - **Services**: `api.js` — thin fetch wrappers for REST; `socket.js` — Socket.IO singleton (not React — shared module instance).
-- **Pages**: Dashboard (overview cards + AI stage), Environment (temp/humidity charts), Devices (relay toggles), TwinPage (3D digital twin, not yet implemented).
+- **Pages**: Dashboard (overview cards + AI stage), Environment (air temp/humidity/soil charts), Devices (relay toggles), TwinPage (3D digital twin with sim_mode toggle).
 
 ### Backend (`../backend/`)
 
@@ -91,7 +91,7 @@ VITE_BACKEND_URL=http://localhost:8000
 |----------|---------|
 | `GET /api/health` | MQTT status, history record counts |
 | `GET /api/state` | Latest snapshot: environment + devices + ai |
-| `GET /api/environment/history?limit=N` | Temperature/humidity history array |
+| `GET /api/environment/history?limit=N` | air_temperature/air_humidity/soil_moisture history array |
 | `GET /api/devices/history?limit=N` | Fan/mist relay history array |
 | `GET /api/ai/history?limit=N` | AI stage classification history |
 
@@ -102,7 +102,12 @@ Connect to `http://localhost:8000` (Socket.IO path).
 **Received event: `"state"`**
 ```json
 {
-  "environment": { "temperature": 24.5, "humidity": 78.2 },
+  "environment": {
+    "timestamp": 1716288000.0,
+    "air_temperature": 24.5,
+    "air_humidity": 78.2,
+    "soil_moisture": 62.0
+  },
   "devices": { "fan": true, "mist": false },
   "ai": { "stage": "growing", "confidence": 0.92 },
   "last_updated": "2026-05-21T10:00:00Z",
@@ -117,7 +122,12 @@ Topic pattern: `{MQTT_TOPIC_PREFIX}/rack-1/{category}`
 
 ```json
 // mushroom-farm/rack-1/environment
-{ "temperature": 24.5, "humidity": 78.2 }
+{
+  "timestamp": 1716288000,
+  "air_temperature": 24.5,
+  "air_humidity": 78.2,
+  "soil_moisture": 62.0
+}
 
 // mushroom-farm/rack-1/devices
 { "fan": true, "mist": false }
@@ -143,4 +153,3 @@ Fonts: JetBrains Mono for live data values, Inter for body text.
 - No database — data is in-memory only; history lost on backend restart
 - No auth layer
 - No test suite (neither vitest nor pytest is configured)
-- 3D Twin page is a placeholder

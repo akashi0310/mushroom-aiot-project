@@ -30,13 +30,18 @@ export function DashboardPage() {
   const { environment, devices, ai, lastUpdated } = useGreenhouseSnapshot()
 
   const tempColor = !environment ? '#1A261A'
-    : environment.temperature > 30 ? '#DC2626'
-    : environment.temperature < 22 ? '#0891B2'
+    : environment.air_temperature > 30 ? '#DC2626'
+    : environment.air_temperature < 22 ? '#0891B2'
     : '#16A34A'
 
   const humColor = !environment ? '#1A261A'
-    : environment.humidity < 70  ? '#D97706'
-    : environment.humidity > 93  ? '#0891B2'
+    : environment.air_humidity < 70  ? '#D97706'
+    : environment.air_humidity > 93  ? '#0891B2'
+    : '#16A34A'
+
+  const soilColor = !environment ? '#1A261A'
+    : environment.soil_moisture < 40 ? '#D97706'
+    : environment.soil_moisture > 85 ? '#0891B2'
     : '#16A34A'
 
   const ts = lastUpdated
@@ -68,19 +73,26 @@ export function DashboardPage() {
           <SectionLabel>// environment</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }}>
             <MetricCard
-              label="temperature"
-              value={environment?.temperature?.toFixed(1)}
+              label="air_temperature"
+              value={environment?.air_temperature?.toFixed(1)}
               unit="°C"
               color={tempColor}
-              accent={environment?.temperature > 30}
-              note={environment?.temperature > 30 ? '⚠ above threshold' : environment?.temperature < 22 ? '↓ below optimal' : '✓ optimal range'}
+              accent={environment?.air_temperature > 30}
+              note={environment?.air_temperature > 30 ? '⚠ above threshold' : environment?.air_temperature < 22 ? '↓ below optimal' : '✓ optimal range'}
             />
             <MetricCard
-              label="humidity"
-              value={environment?.humidity?.toFixed(1)}
+              label="air_humidity"
+              value={environment?.air_humidity?.toFixed(1)}
               unit="%"
               color={humColor}
-              note={environment?.humidity < 70 ? '⚠ too dry' : environment?.humidity > 93 ? '⚠ too humid' : '✓ optimal range'}
+              note={environment?.air_humidity < 70 ? '⚠ too dry' : environment?.air_humidity > 93 ? '⚠ too humid' : '✓ optimal range'}
+            />
+            <MetricCard
+              label="soil_moisture"
+              value={environment?.soil_moisture?.toFixed(1)}
+              unit="%"
+              color={soilColor}
+              note={environment?.soil_moisture < 40 ? '⚠ too dry' : environment?.soil_moisture > 85 ? '⚠ too wet' : '✓ optimal range'}
             />
           </div>
         </section>
