@@ -67,7 +67,7 @@ void reconnectMQTT() {
         } else {
             Serial.print("failed, rc=");
             Serial.print(mqttClient.state());
-            Serial.println(" retrying in 5s...");
+            Serial.println(" Trying again in 5 seconds...");
             delay(5000);
         }
     }
@@ -102,6 +102,13 @@ bool flushCache(SensorData* dataArray, int count) {
 void setup() {
     pinMode(SOIL_POWER_PIN, OUTPUT);
     digitalWrite(SOIL_POWER_PIN, LOW);
+    pinMode(RELAY_PIN, OUTPUT);
+    pinMode(RELAY_FAN, OUTPUT);
+
+    // relay OFF initially
+    digitalWrite(RELAY_PIN, HIGH);
+    digitalWrite(RELAY_FAN, HIGH);
+
     pinMode(DHTPIN, INPUT_PULLUP);
 
     Serial.begin(9600);
@@ -164,6 +171,16 @@ void loop() {
 
         time_t now = time(nullptr);
         Serial.printf("[ENV] %.1f°C  %.1f%%  soil:%.1f%%\n", air_t, air_h, soilMoisture);
+
+        // Relay + Pump + Fan
+        digitalWrite(RELAY_PIN, LOW);  // pump ON
+        digitalWrite(RELAY_FAN, HIGH); // fan ON
+        Serial.println("SWITCH ON");
+        delay(2000);
+        digitalWrite(RELAY_PIN, HIGH); // pump OFF
+        digitalWrite(RELAY_FAN, LOW);  // fan OFF
+        Serial.println("SWITCH OFF");
+        delay(2000);
 
         if (cacheCount < MAX_CACHE_SIZE) {
             dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture };
