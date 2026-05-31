@@ -11,7 +11,8 @@ DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
-struct SensorData {
+struct SensorData
+{
     time_t timestamp;
     float air_temperature;
     float air_humidity;
@@ -22,11 +23,13 @@ SensorData dataCache[MAX_CACHE_SIZE];
 int cacheCount = 0;
 unsigned long lastSampleTime = 0;
 
-void syncNTPTime() {
+void syncNTPTime()
+{
     Serial.println("[NTP] Synchronizing real time...");
     configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     time_t now = time(nullptr);
-    while (now < 8 * 3600 * 2) {
+    while (now < 8 * 3600 * 2)
+    {
         delay(500);
         Serial.print(".");
         now = time(nullptr);
@@ -34,36 +37,51 @@ void syncNTPTime() {
     Serial.println("\n[NTP] Synchronization complete!");
 }
 
-void connectToWiFi() {
-    if (WiFi.status() == WL_CONNECTED) return;
+void connectToWiFi()
+{
+    if (WiFi.status() == WL_CONNECTED)
+        return;
     Serial.print("[NETWORK] Connecting to Wi-Fi: ");
     Serial.println(WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int attempt = 0;
-    while (WiFi.status() != WL_CONNECTED && attempt < 30) {
+    while (WiFi.status() != WL_CONNECTED && attempt < 30)
+    {
         delay(500);
         Serial.print(".");
         attempt++;
     }
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED)
+    {
         Serial.println("\n[NETWORK] Wi-Fi connected!");
     }
 }
 
-void reconnectMQTT() {
-    while (!mqttClient.connected()) {
-        if (WiFi.status() != WL_CONNECTED) {
+void reconnectMQTT()
+{
+    while (!mqttClient.connected())
+    {
+        if (WiFi.status() != WL_CONNECTED)
+        {
             connectToWiFi();
         }
-        Serial.print("[MQTT] Connecting to broker...");
-        String clientId = "ESP8266-" + String(random(0, 0xffff), HEX);
+        Serial.print("[MQTT] Connecting to Broker...");
+        String clientId = "ESP8266Client-" + String(random(0, 0xffff), HEX);
 
-        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
-            Serial.println("connected!");
-        } else {
-            Serial.print("failed, rc=");
+#if defined(MQTT_USER) && defined(MQTT_PASSWORD)
+        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD))
+        {
+#else
+        if (mqttClient.connect(clientId.c_str()))
+        {
+#endif
+            Serial.println("Connected!");
+        }
+        else
+        {
+            Serial.print("Failed, rc=");
             Serial.print(mqttClient.state());
             Serial.println(" retrying in 5s...");
             delay(5000);
@@ -71,33 +89,43 @@ void reconnectMQTT() {
     }
 }
 
-bool flushCache(SensorData* dataArray, int count) {
-    if (!mqttClient.connected()) {
+bool sendBatchData(SensorData *dataArray, int count)
+{
+    if (!mqttClient.connected())
+    {
         reconnectMQTT();
     }
 
-    bool allOk = true;
-    for (int i = 0; i < count; i++) {
-        JsonDocument doc;
-        doc["timestamp"]       = dataArray[i].timestamp;
-        doc["air_temperature"] = dataArray[i].air_temperature;
-        doc["air_humidity"]    = dataArray[i].air_humidity;
-        doc["soil_moisture"]   = dataArray[i].soil_moisture;
+    JsonDocument doc;
+    JsonArray array = doc.to<JsonArray>();
+
+    for (int i = 0; i < count; i++)
+    {
+        JsonObject obj = array.add<JsonObject>();
+        obj["timestamp"] = dataArray[i].timestamp;
+        obj["air_temperature"] = dataArray[i].air_temperature;
+        obj["air_humidity"] = dataArray[i].air_humidity;
+        obj["soil_moisture"] = dataArray[i].soil_moisture;
+    }
 
         String payload;
         serializeJson(doc, payload);
 
-        if (mqttClient.publish(TOPIC_ENV, payload.c_str())) {
-            Serial.printf("[MQTT] Published: %s\n", payload.c_str());
-        } else {
-            Serial.println("[MQTT] Publish failed.");
-            allOk = false;
-        }
+    bool success = mqttClient.publish(TOPIC_AI, jsonPayload.c_str());
+
+    if (success)
+    {
+        Serial.println("[MQTT] Data published to Broker successfully.");
+    }
+    else
+    {
+        Serial.println("[MQTT] Failed to publish data.");
     }
     return allOk;
 }
 
-void setup() {
+void setup()
+{
     pinMode(SOIL_POWER_PIN, OUTPUT);
     digitalWrite(SOIL_POWER_PIN, LOW);
     pinMode(DHTPIN, INPUT_PULLUP);
@@ -108,7 +136,8 @@ void setup() {
     dht.begin();
 
     connectToWiFi();
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED)
+    {
         syncNTPTime();
     }
 
@@ -119,15 +148,18 @@ void setup() {
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
 
-void loop() {
-    if (!mqttClient.connected()) {
+void loop()
+{
+    if (!mqttClient.connected())
+    {
         reconnectMQTT();
     }
     mqttClient.loop();
 
     unsigned long currentMillis = millis();
 
-    if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL) {
+    if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL)
+    {
         lastSampleTime = currentMillis;
 
         digitalWrite(SOIL_POWER_PIN, HIGH);
@@ -156,7 +188,8 @@ void loop() {
             dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture };
         }
 
-        if (WiFi.status() != WL_CONNECTED) {
+        if (WiFi.status() != WL_CONNECTED)
+        {
             connectToWiFi();
         } else {
             if (now < 8 * 3600 * 2) syncNTPTime();
