@@ -35,8 +35,13 @@ int cacheCount = 0;
 unsigned long lastSampleTime = 0;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 // ── Helpers ───────────────────────────────────────────────────────────────────
 void syncNTPTime() {
+=======
+void syncNTPTime()
+{
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
 =======
 void syncNTPTime()
 {
@@ -75,6 +80,7 @@ void connectToWiFi()
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 void reconnectMQTT() {
     while (!mqttClient.connected()) {
         if (WiFi.status() != WL_CONNECTED) connectToWiFi();
@@ -85,6 +91,8 @@ void reconnectMQTT() {
         } else {
             Serial.printf("failed, rc=%d  retrying in 5s...\n", mqttClient.state());
 =======
+=======
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
 void reconnectMQTT()
 {
     while (!mqttClient.connected())
@@ -110,12 +118,16 @@ void reconnectMQTT()
             Serial.print("Failed, rc=");
             Serial.print(mqttClient.state());
             Serial.println(" Trying again in 5 seconds...");
+<<<<<<< HEAD
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
+=======
 >>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
             delay(5000);
         }
     }
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 // Apply actuator decision: drive relay pins and report to serial.
 void applyActuatorAction(ActuatorAction action) {
@@ -152,6 +164,8 @@ bool publishTelemetry(const SensorData& d, HealthStatus health, ActuatorAction a
         }
         Serial.printf("[MQTT->env] %s\n", payload.c_str());
 =======
+=======
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
 bool sendBatchData(SensorData *dataArray, int count)
 {
     if (!mqttClient.connected())
@@ -179,6 +193,13 @@ bool sendBatchData(SensorData *dataArray, int count)
     if (success)
     {
         Serial.println("[MQTT] Data published to Broker successfully.");
+<<<<<<< HEAD
+=======
+    }
+    else
+    {
+        Serial.println("[MQTT] Failed to publish data.");
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
     }
     else
     {
@@ -207,9 +228,14 @@ bool sendBatchData(SensorData *dataArray, int count)
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 // ── Arduino lifecycle ─────────────────────────────────────────────────────────
 void setup() {
     // Soil sensor power control
+=======
+void setup()
+{
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
 =======
 void setup()
 {
@@ -238,8 +264,11 @@ void setup()
 
     connectToWiFi();
 <<<<<<< HEAD
+<<<<<<< HEAD
     if (WiFi.status() == WL_CONNECTED) syncNTPTime();
 =======
+=======
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
     if (WiFi.status() == WL_CONNECTED)
     {
         syncNTPTime();
@@ -255,9 +284,12 @@ void setup()
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 void loop() {
     if (!mqttClient.connected()) reconnectMQTT();
 =======
+=======
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
 void loop()
 {
     if (!mqttClient.connected())
@@ -272,6 +304,7 @@ void loop()
     lastSampleTime = now_ms;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     // ── 1. Read sensors ───────────────────────────────────────────────────────
     digitalWrite(SOIL_POWER_PIN, HIGH);
     delay(200);
@@ -280,6 +313,8 @@ void loop()
     soilMoisture = constrain(soilMoisture, 0.0f, 100.0f);
     digitalWrite(SOIL_POWER_PIN, LOW);   // Save power
 =======
+=======
+>>>>>>> ed1126a1ab451007936623bf6cc4d28afa14cf37
     if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL)
     {
         lastSampleTime = currentMillis;
@@ -327,6 +362,16 @@ void loop()
             for (int i = 0; i < cacheCount && ok; i++) {
                 ok = publishTelemetry(dataCache[i], health, action);
 =======
+        // Relay + Pump + Fan
+        digitalWrite(RELAY_PIN, LOW);  // pump ON
+        digitalWrite(RELAY_FAN, HIGH); // fan ON
+        Serial.println("SWITCH ON");
+        delay(2000);
+        digitalWrite(RELAY_PIN, HIGH); // pump OFF
+        digitalWrite(RELAY_FAN, LOW);  // fan OFF
+        Serial.println("SWITCH OFF");
+        delay(2000);
+
         // Relay + Pump + Fan
         digitalWrite(RELAY_PIN, LOW);  // pump ON
         digitalWrite(RELAY_FAN, HIGH); // fan ON
