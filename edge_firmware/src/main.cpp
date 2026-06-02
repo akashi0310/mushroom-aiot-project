@@ -7,7 +7,8 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-#include "plant_classifier.h"
+#include "plant_classifier.h"    // classifyPlantHealth() -> HealthStatus
+#include "actuator_classifier.h" // classifyActuator()   -> ActuatorAction
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
@@ -53,7 +54,6 @@ void connectToWiFi()
     Serial.println(WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
     int attempt = 0;
     while (WiFi.status() != WL_CONNECTED && attempt < 30)
     {
@@ -91,14 +91,32 @@ void reconnectMQTT()
         }
         else
         {
-            Serial.print("Failed, rc=");
+            Serial.print("failed, rc=");
             Serial.print(mqttClient.state());
-            Serial.println(" Trying again in 5 seconds...");
+            Serial.println(" retrying in 5s...");
             delay(5000);
         }
     }
 }
 
+// Apply actuator decision: drive pump (D1) + both fans (D0, D2)
+void applyActuatorAction(ActuatorAction action)
+{
+    bool pump = (action == ACTUATOR_PUMP) || (action == ACTUATOR_PUMP_AND_FAN);
+    bool fan = (action == ACTUATOR_FAN) || (action == ACTUATOR_PUMP_AND_FAN);
+
+    digitalWrite(PUMP_PIN, pump ? RELAY_ON : RELAY_OFF);
+    digitalWrite(FAN1_PIN, fan ? RELAY_OFF : RELAY_ON);
+    digitalWrite(FAN2_PIN, fan ? RELAY_OFF : RELAY_ON);
+
+    Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
+                  pump ? "ON" : "OFF",
+                  fan ? "ON" : "OFF",
+                  fan ? "ON" : "OFF",
+                  ACTUATOR_NAMES[action]);
+}
+
+// Flush cached sensor data to MQTT
 bool flushCache(SensorData *dataArray, int count)
 {
     if (!mqttClient.connected())
@@ -145,6 +163,14 @@ void setup()
     digitalWrite(RELAY_FAN2, HIGH);
 
     pinMode(DHTPIN, INPUT_PULLUP);
+
+    // Actuator relay pins - start all OFF
+    pinMode(PUMP_PIN, OUTPUT);
+    digitalWrite(PUMP_PIN, RELAY_OFF);
+    pinMode(FAN1_PIN, OUTPUT);
+    digitalWrite(FAN1_PIN, RELAY_OFF);
+    pinMode(FAN2_PIN, OUTPUT);
+    digitalWrite(FAN2_PIN, RELAY_OFF);
 
     Serial.begin(9600);
     delay(1000);
@@ -198,25 +224,19 @@ void loop()
             return;
         }
 
+        // Run ML classifiers
         HealthStatus status = classifyPlantHealth(air_t, air_h, soilMoisture);
+        ActuatorAction action = classifyActuator(air_t, air_h, soilMoisture);
 
-        Serial.printf(
-            "[ENV] %.1f°C  %.1f%%  soil:%.1f%%  => %s\n",
-            air_t, air_h, soilMoisture, HEALTH_NAMES[status]);
+        Serial.printf("[ENV] %.1fC  %.1f%%  soil:%.1f%%  => %s\n",
+                      air_t, air_h, soilMoisture, HEALTH_NAMES[status]);
 
+        // Apply actuator decision from ML model
+        applyActuatorAction(action);
+
+        // Cache data
         time_t now = time(nullptr);
 
-        // Trigger Actuators (Non-blocking tracking begins)
-        actuatorsActive = true;
-        actuatorStartTime = currentMillis;
-
-        // Active-low logic: LOW turns ON
-        digitalWrite(RELAY_PIN, LOW);  // Pump ON
-        digitalWrite(RELAY_FAN, LOW);  // Fan ON
-        digitalWrite(RELAY_FAN2, LOW); // Fan ON
-        Serial.println("[ACTUATORS] Pump and Fan Turned ON");
-
-        // Array Cache management
         if (cacheCount < MAX_CACHE_SIZE)
         {
             dataCache[cacheCount++] = {now, air_t, air_h, soilMoisture};

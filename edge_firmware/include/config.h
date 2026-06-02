@@ -10,6 +10,16 @@ const char *const WIFI_PASSWORD = "12345679";
 #define RELAY_FAN D2
 #define RELAY_FAN2 D0
 
+// Actuator pins (relay modules)
+#define PUMP_PIN D1 // GPIO  5 – Water pump
+#define FAN1_PIN D0 // GPIO 16 – Cooling fan 1
+#define FAN2_PIN D2 // GPIO  4 – Cooling fan 2
+
+// Most relay boards are active-LOW: LOW = relay ON, HIGH = relay OFF.
+// If your relay is active-HIGH, swap the two values below.
+#define RELAY_ON LOW
+#define RELAY_OFF HIGH
+
 #define SOIL_POWER_PIN 0
 #define SOIL_ANALOG_PIN A0
 
@@ -23,5 +33,6 @@ const int MQTT_PORT = 8883;
 #define MQTT_PASSWORD "mushroom-esp8266"
 
 const char *const TOPIC_ENV = "mushroom-farm/rack-1/environment";
+const char *const TOPIC_ACT = "mushroom-farm/rack-1/actuators";
 
 #endif
