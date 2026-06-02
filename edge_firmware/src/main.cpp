@@ -14,8 +14,12 @@ DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
-struct SensorData {
+struct SensorData
+{
     time_t timestamp;
+    float air_temperature;
+    float air_humidity;
+    float soil_moisture;
     float air_temperature;
     float air_humidity;
     float soil_moisture;
@@ -29,7 +33,8 @@ void syncNTPTime() {
     Serial.println("[NTP] Synchronizing real time...");
     configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     time_t now = time(nullptr);
-    while (now < 8 * 3600 * 2) {
+    while (now < 8 * 3600 * 2)
+    {
         delay(500);
         Serial.print(".");
         now = time(nullptr);
@@ -37,19 +42,23 @@ void syncNTPTime() {
     Serial.println("\n[NTP] Synchronization complete!");
 }
 
-void connectToWiFi() {
-    if (WiFi.status() == WL_CONNECTED) return;
+void connectToWiFi()
+{
+    if (WiFi.status() == WL_CONNECTED)
+        return;
     Serial.print("[NETWORK] Connecting to Wi-Fi: ");
     Serial.println(WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     int attempt = 0;
-    while (WiFi.status() != WL_CONNECTED && attempt < 30) {
+    while (WiFi.status() != WL_CONNECTED && attempt < 30)
+    {
         delay(500);
         Serial.print(".");
         attempt++;
     }
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED)
+    {
         Serial.println("\n[NETWORK] Wi-Fi connected!");
     }
 }
@@ -61,7 +70,8 @@ void reconnectMQTT() {
         }
         Serial.print("[MQTT] Connecting to broker...");
         String clientId = "ESP8266-" + String(random(0, 0xffff), HEX);
-        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
+        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD))
+        {
             Serial.println("connected!");
         } else {
             Serial.print("failed, rc=");
@@ -83,8 +93,8 @@ void applyActuatorAction(ActuatorAction action) {
 
     Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
                   pump ? "ON" : "OFF",
-                  fan  ? "ON" : "OFF",
-                  fan  ? "ON" : "OFF",
+                  fan ? "ON" : "OFF",
+                  fan ? "ON" : "OFF",
                   ACTUATOR_NAMES[action]);
 }
 
