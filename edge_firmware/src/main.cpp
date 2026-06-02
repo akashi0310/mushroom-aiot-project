@@ -14,6 +14,72 @@ DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
+// ─── Control config (received from backend via MQTT) ─────────────────────────
+
+enum ControlMode : uint8_t { MODE_OFF = 0, MODE_AUTO = 1, MODE_MANUAL = 2 };
+
+struct Thresholds {
+    float temp_fan_on     = 30.0f;  // °C
+    float humidity_fan_on = 50.0f;  // % — fan ON below this
+    float soil_pump_on    = 25.0f;  // % — pump ON below this
+};
+
+ControlMode currentMode = MODE_AUTO;
+Thresholds  thresholds;
+
+// Resolve actuator action based on current mode
+ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
+{
+    switch (currentMode)
+    {
+        case MODE_OFF:
+            return ACTUATOR_IDLE;
+
+        case MODE_AUTO:
+            return classifyActuator(temp, hum, soil);
+
+        case MODE_MANUAL: {
+            bool pump = soil < thresholds.soil_pump_on;
+            bool fan  = (temp > thresholds.temp_fan_on) || (hum < thresholds.humidity_fan_on);
+            if (pump && fan) return ACTUATOR_PUMP_AND_FAN;
+            if (pump)        return ACTUATOR_PUMP;
+            if (fan)         return ACTUATOR_FAN;
+            return ACTUATOR_IDLE;
+        }
+    }
+    return ACTUATOR_IDLE;
+}
+
+// MQTT message callback — handles config topic
+void onMqttMessage(char* topic, byte* payload, unsigned int length)
+{
+    if (strcmp(topic, TOPIC_CONFIG) != 0) return;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload, length);
+    if (err) {
+        Serial.printf("[CFG] JSON parse error: %s\n", err.c_str());
+        return;
+    }
+
+    const char* mode = doc["mode"] | "auto";
+    if      (strcmp(mode, "off")    == 0) currentMode = MODE_OFF;
+    else if (strcmp(mode, "manual") == 0) currentMode = MODE_MANUAL;
+    else                                   currentMode = MODE_AUTO;
+
+    if (doc.containsKey("thresholds")) {
+        thresholds.temp_fan_on     = doc["thresholds"]["temp_fan_on"]     | 30.0f;
+        thresholds.humidity_fan_on = doc["thresholds"]["humidity_fan_on"] | 50.0f;
+        thresholds.soil_pump_on    = doc["thresholds"]["soil_pump_on"]    | 25.0f;
+    }
+
+    Serial.printf("[CFG] mode=%s  temp_fan>%.1f  hum_fan<%.1f  soil_pump<%.1f\n",
+                  mode,
+                  thresholds.temp_fan_on,
+                  thresholds.humidity_fan_on,
+                  thresholds.soil_pump_on);
+}
+
 struct SensorData
 {
     time_t timestamp;
@@ -85,6 +151,7 @@ void reconnectMQTT()
         if (mqttClient.connect(clientBuf, MQTT_USER, MQTT_PASSWORD))
         {
             Serial.println("Connected!");
+            mqttClient.subscribe(TOPIC_CONFIG);  // receive control config from backend
         }
         else
         {
@@ -211,6 +278,8 @@ void setup()
 
     espClient.setInsecure();
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    mqttClient.setCallback(onMqttMessage);
+    mqttClient.setBufferSize(512);  // config payload can be larger than default 256 B
 }
 
 void loop()
@@ -258,8 +327,8 @@ void loop()
             return;
         }
 
-        HealthStatus status = classifyPlantHealth(air_t, air_h, soilMoisture);
-        ActuatorAction action = classifyActuator(air_t, air_h, soilMoisture);
+        HealthStatus   status = classifyPlantHealth(air_t, air_h, soilMoisture);
+        ActuatorAction action = resolveActuatorAction(air_t, air_h, soilMoisture);
 
         Serial.printf("[ENV] %.1fC  %.1f%%  soil:%.1f%%  => %s\n",
                       air_t, air_h, soilMoisture, HEALTH_NAMES[status]);

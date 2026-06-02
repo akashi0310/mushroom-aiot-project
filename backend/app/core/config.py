@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         return f"{self.mqtt_topic_prefix}/rack-1/ai"
 
     @property
+    def topic_config(self) -> str:
+        return f"{self.mqtt_topic_prefix}/rack-1/config"
+
+    @property
     def topic_wildcard(self) -> str:
         return f"{self.mqtt_topic_prefix}/#"
 

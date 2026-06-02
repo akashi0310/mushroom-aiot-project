@@ -9,6 +9,7 @@ export const useGreenhouseStore = create((set) => ({
   environment:  null,   // { air_temperature, air_humidity, soil_moisture, timestamp }
   devices:      null,   // { fan, pump }
   ai:           null,   // { status: 'healthy' | 'warning' | 'critical' }
+  control:      null,   // { mode: 'off'|'auto'|'manual', thresholds: {...} }
   lastUpdated:  null,   // ISO string
 
   // ── History (last 200 records each) ─────────────────────────────────
@@ -22,9 +23,10 @@ export const useGreenhouseStore = create((set) => ({
   setFromSocketEvent: (payload) =>
     set((state) => {
       const next = {
-        environment: payload.environment ?? state.environment,
-        devices:     payload.devices     ?? state.devices,
-        ai:          payload.ai          ?? state.ai,
+        environment: payload.environment  ?? state.environment,
+        devices:     payload.devices      ?? state.devices,
+        ai:          payload.ai           ?? state.ai,
+        control:     payload.control      ?? state.control,
         lastUpdated: payload.last_updated ?? state.lastUpdated,
       }
 

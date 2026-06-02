@@ -11,3 +11,9 @@ class MQTTStatus(str, Enum):
     connected    = "connected"
     disconnected = "disconnected"
     error        = "error"
+
+
+class ControlMode(str, Enum):
+    off    = "off"
+    auto   = "auto"
+    manual = "manual"

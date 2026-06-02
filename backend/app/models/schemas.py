@@ -3,7 +3,20 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import HealthStatus, MQTTStatus
+from app.models.enums import ControlMode, HealthStatus, MQTTStatus
+
+
+# ─── Control config ──────────────────────────────────────────────────────────
+
+class ThresholdsPayload(BaseModel):
+    temp_fan_on:     float = Field(30.0, ge=-20, le=80,  description="°C — fan turns ON above this")
+    humidity_fan_on: float = Field(50.0, ge=0,   le=100, description="% — fan turns ON below this")
+    soil_pump_on:    float = Field(25.0, ge=0,   le=100, description="% — pump turns ON below this")
+
+
+class ControlPayload(BaseModel):
+    mode:       ControlMode       = ControlMode.auto
+    thresholds: ThresholdsPayload = Field(default_factory=ThresholdsPayload)
 
 
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────

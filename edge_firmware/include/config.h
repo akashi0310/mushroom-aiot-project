@@ -32,5 +32,6 @@ const int         MQTT_PORT = 8883;
 const char *const TOPIC_ENV     = "mushroom-farm/rack-1/environment";
 const char *const TOPIC_AI      = "mushroom-farm/rack-1/ai";
 const char *const TOPIC_DEVICES = "mushroom-farm/rack-1/devices";
+const char *const TOPIC_CONFIG  = "mushroom-farm/rack-1/config";
 
 #endif
