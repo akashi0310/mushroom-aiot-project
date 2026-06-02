@@ -80,9 +80,9 @@ void applyActuatorAction(ActuatorAction action) {
     bool pump = (action == ACTUATOR_PUMP)         || (action == ACTUATOR_PUMP_AND_FAN);
     bool fan  = (action == ACTUATOR_FAN)          || (action == ACTUATOR_PUMP_AND_FAN);
 
-    digitalWrite(PUMP_PIN, pump ? HIGH : LOW);
-    digitalWrite(FAN1_PIN, fan  ? HIGH : LOW);  // Fan 1 (D0)
-    digitalWrite(FAN2_PIN, fan  ? HIGH : LOW);  // Fan 2 (D2)
+    digitalWrite(PUMP_PIN, pump ? RELAY_ON : RELAY_OFF);
+    digitalWrite(FAN1_PIN, fan  ? RELAY_ON : RELAY_OFF);  // Fan 1 (D0)
+    digitalWrite(FAN2_PIN, fan  ? RELAY_ON : RELAY_OFF);  // Fan 2 (D2)
 
     Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
                   pump ? "ON" : "OFF",
@@ -145,9 +145,9 @@ void setup() {
     pinMode(DHTPIN, INPUT_PULLUP);
 
     // Actuator relay pins – start all OFF (pump D1, fan1 D0, fan2 D2)
-    pinMode(PUMP_PIN, OUTPUT);  digitalWrite(PUMP_PIN, LOW);
-    pinMode(FAN1_PIN, OUTPUT);  digitalWrite(FAN1_PIN, LOW);
-    pinMode(FAN2_PIN, OUTPUT);  digitalWrite(FAN2_PIN, LOW);
+    pinMode(PUMP_PIN, OUTPUT);  digitalWrite(PUMP_PIN, RELAY_OFF);
+    pinMode(FAN1_PIN, OUTPUT);  digitalWrite(FAN1_PIN, RELAY_OFF);
+    pinMode(FAN2_PIN, OUTPUT);  digitalWrite(FAN2_PIN, RELAY_OFF);
 
     Serial.begin(9600);
     delay(1000);

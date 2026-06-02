@@ -12,6 +12,11 @@ const char *const WIFI_PASSWORD = "usth2021!";
 #define FAN1_PIN  D0   // GPIO 16 – Cooling fan 1
 #define FAN2_PIN  D2   // GPIO  4 – Cooling fan 2
 
+// Most relay boards are active-LOW: LOW = relay ON, HIGH = relay OFF.
+// If your relay is active-HIGH, swap the two values below.
+#define RELAY_ON  LOW
+#define RELAY_OFF HIGH
+
 #define SOIL_POWER_PIN  0
 #define SOIL_ANALOG_PIN A0
 
