@@ -79,14 +79,14 @@ export function DevicesPage() {
             state={data?.fan}
             activeColorHex="#D97706"
             activeColorRgb="217,119,6"
-            description="Triggers when temp > 29°C or humidity > 93%"
+            description="Triggers when temp > 30°C or humidity < 50%"
           />
           <RelayCard
             name="water_pump"
             state={data?.pump}
             activeColorHex="#0891B2"
             activeColorRgb="8,145,178"
-            description="Triggers when soil moisture < 25%"
+            description="Triggers when soil moisture < 25% (dry soil)"
           />
         </div>
 

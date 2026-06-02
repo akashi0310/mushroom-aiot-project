@@ -29,8 +29,8 @@ const int         MQTT_PORT = 8883;
 #define MQTT_USER     "mushroom-esp8266"
 #define MQTT_PASSWORD "mushroom-esp8266"
 
-const char *const TOPIC_ENV = "mushroom-farm/rack-1/environment";
-const char *const TOPIC_AI  = "mushroom-farm/rack-1/ai";
-const char *const TOPIC_ACT = "mushroom-farm/rack-1/actuators";
+const char *const TOPIC_ENV     = "mushroom-farm/rack-1/environment";
+const char *const TOPIC_AI      = "mushroom-farm/rack-1/ai";
+const char *const TOPIC_DEVICES = "mushroom-farm/rack-1/devices";
 
 #endif

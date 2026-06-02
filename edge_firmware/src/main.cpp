@@ -20,7 +20,8 @@ struct SensorData
     float air_temperature;
     float air_humidity;
     float soil_moisture;
-    HealthStatus health;
+    HealthStatus   health;
+    ActuatorAction action;
 };
 
 SensorData dataCache[MAX_CACHE_SIZE];
@@ -155,10 +156,29 @@ bool flushCache(SensorData *dataArray, int count)
             Serial.println("[MQTT] Publish ai failed.");
             allOk = false;
         }
+
+        // Devices state derived from actuator action
+        ActuatorAction act = dataArray[i].action;
+        bool pumpOn = (act == ACTUATOR_PUMP)     || (act == ACTUATOR_PUMP_AND_FAN);
+        bool fanOn  = (act == ACTUATOR_FAN)      || (act == ACTUATOR_PUMP_AND_FAN);
+
+        JsonDocument devDoc;
+        devDoc["fan"]  = fanOn;
+        devDoc["pump"] = pumpOn;
+
+        String devPayload;
+        serializeJson(devDoc, devPayload);
+
+        if (!mqttClient.publish(TOPIC_DEVICES, devPayload.c_str()))
+        {
+            Serial.println("[MQTT] Publish devices failed.");
+            allOk = false;
+        }
         else
         {
-            Serial.printf("[MQTT] Published: %s | status=%s\n",
-                          envPayload.c_str(), HEALTH_NAMES[dataArray[i].health]);
+            Serial.printf("[MQTT] Published: %s | status=%s | fan=%d pump=%d\n",
+                          envPayload.c_str(), HEALTH_NAMES[dataArray[i].health],
+                          fanOn, pumpOn);
         }
     }
     return allOk;
@@ -250,14 +270,14 @@ void loop()
 
         if (cacheCount < MAX_CACHE_SIZE)
         {
-            dataCache[cacheCount++] = {now, air_t, air_h, soilMoisture, status};
+            dataCache[cacheCount++] = {now, air_t, air_h, soilMoisture, status, action};
             Serial.printf("[CACHE] Buffered locally. Size: %d/%d\n", cacheCount, MAX_CACHE_SIZE);
         }
         else
         {
             for (int i = 1; i < MAX_CACHE_SIZE; i++)
                 dataCache[i - 1] = dataCache[i];
-            dataCache[MAX_CACHE_SIZE - 1] = {now, air_t, air_h, soilMoisture, status};
+            dataCache[MAX_CACHE_SIZE - 1] = {now, air_t, air_h, soilMoisture, status, action};
             Serial.println("[CACHE] Buffer exceeded! Overwriting oldest record.");
         }
     }
