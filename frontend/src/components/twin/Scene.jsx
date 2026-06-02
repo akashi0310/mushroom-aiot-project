@@ -201,11 +201,9 @@ function Pebbles() {
 // ─── chibi mushrooms ──────────────────────────────────────────────────────────
 
 const STAGE_CFG = {
-  pinning:      { cap:'#EEC8F4', stem:'#FAF0FC', baseScale:0.26, count:11, spots:false },
-  growing:      { cap:'#C4ECD0', stem:'#EEF8F0', baseScale:0.58, count:8,  spots:false },
-  mature:       { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7,  spots:true  },
-  overgrown:    { cap:'#E8C882', stem:'#F8EDD4', baseScale:1.30, count:5,  spots:false },
-  contaminated: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
+  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7,  spots:true  },
+  warning:  { cap:'#C4ECD0', stem:'#EEF8F0', baseScale:0.58, count:8,  spots:false },
+  critical: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
 }
 
 function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0, lean=0 }) {
@@ -261,7 +259,7 @@ function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots
 const CLUSTER_DEFS = [{cx:-0.38,cz:0.08},{cx:0.30,cz:-0.20},{cx:-0.55,cz:-0.30},{cx:0.55,cz:0.28}]
 
 function MushroomBed({ stage, tempStress: ts }) {
-  const cfg      = STAGE_CFG[stage] ?? STAGE_CFG.mature
+  const cfg      = STAGE_CFG[stage] ?? STAGE_CFG.healthy
   const capColor = useMemo(() => stressColor(cfg.cap, ts ?? 0), [cfg.cap, ts])
   const lean     = Math.pow(Math.max(0, (ts ?? 0) - 0.3) / 0.7, 1.5) * 0.8
 
@@ -443,7 +441,7 @@ function SceneContent({ environment, devices, ai }) {
 
   const temp   = environment?.air_temperature ?? 24
   const hum    = environment?.air_humidity    ?? 80
-  const stage  = ai?.stage   ?? null
+  const stage  = ai?.status  ?? null
   const fanOn  = devices?.fan  === true
   const mistOn = devices?.mist === true
 

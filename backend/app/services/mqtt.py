@@ -70,7 +70,7 @@ def _on_message(client, userdata, msg):
         elif topic == settings.topic_ai:
             payload = AIPayload(**data)
             store.update_ai(payload, ts)
-            print(f"[AI]   stage={payload.stage}  conf={payload.confidence}")
+            print(f"[AI]   status={payload.status}")
 
     except Exception as exc:
         print(f"[MQTT] Validation error on {topic}: {exc}")

@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import AIStage, MQTTStatus
+from app.models.enums import HealthStatus, MQTTStatus
 
 
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
@@ -28,8 +28,7 @@ class DevicesPayload(BaseModel):
 
 
 class AIPayload(BaseModel):
-    stage:      AIStage
-    confidence: float = Field(..., ge=0, le=1)
+    status: HealthStatus
 
 
 # ─── API responses ────────────────────────────────────────────────────────────

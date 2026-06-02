@@ -1,12 +1,10 @@
 from enum import Enum
 
 
-class AIStage(str, Enum):
-    pinning      = "pinning"
-    growing      = "growing"
-    mature       = "mature"
-    overgrown    = "overgrown"
-    contaminated = "contaminated"
+class HealthStatus(str, Enum):
+    healthy  = "healthy"
+    warning  = "warning"
+    critical = "critical"
 
 
 class MQTTStatus(str, Enum):

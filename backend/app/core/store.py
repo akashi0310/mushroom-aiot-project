@@ -29,7 +29,7 @@ class AppStore:
     def update_environment(self, payload: EnvironmentPayload, ts: datetime) -> None:
         self.environment = payload
         self.last_updated = ts
-        self.history_environment.append({"timestamp": ts.isoformat(), **payload.model_dump()})
+        self.history_environment.append(payload.model_dump(mode="json"))
 
     def update_devices(self, payload: DevicesPayload, ts: datetime) -> None:
         self.devices = payload

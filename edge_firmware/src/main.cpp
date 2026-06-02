@@ -19,6 +19,7 @@ struct SensorData
     float air_temperature;
     float air_humidity;
     float soil_moisture;
+    HealthStatus health;
 };
 
 SensorData dataCache[MAX_CACHE_SIZE];
@@ -98,19 +99,31 @@ bool flushCache(SensorData* dataArray, int count) {
 
     bool allOk = true;
     for (int i = 0; i < count; i++) {
-        JsonDocument doc;
-        doc["timestamp"]       = dataArray[i].timestamp;
-        doc["air_temperature"] = dataArray[i].air_temperature;
-        doc["air_humidity"]    = dataArray[i].air_humidity;
-        doc["soil_moisture"]   = dataArray[i].soil_moisture;
+        JsonDocument envDoc;
+        envDoc["timestamp"]       = dataArray[i].timestamp;
+        envDoc["air_temperature"] = dataArray[i].air_temperature;
+        envDoc["air_humidity"]    = dataArray[i].air_humidity;
+        envDoc["soil_moisture"]   = dataArray[i].soil_moisture;
 
-        String payload;
-        serializeJson(doc, payload);
+        String envPayload;
+        serializeJson(envDoc, envPayload);
 
-        if (mqttClient.publish(TOPIC_ENV, payload.c_str())) {
-            Serial.printf("[MQTT] Published: %s\n", payload.c_str());
+        if (!mqttClient.publish(TOPIC_ENV, envPayload.c_str())) {
+            Serial.println("[MQTT] Publish env failed.");
+            allOk = false;
+        }
+
+        JsonDocument aiDoc;
+        aiDoc["status"] = HEALTH_NAMES[dataArray[i].health];
+
+        String aiPayload;
+        serializeJson(aiDoc, aiPayload);
+
+        if (mqttClient.publish(TOPIC_AI, aiPayload.c_str())) {
+            Serial.printf("[MQTT] Published env+ai: %s | status=%s\n",
+                          envPayload.c_str(), HEALTH_NAMES[dataArray[i].health]);
         } else {
-            Serial.println("[MQTT] Publish failed.");
+            Serial.println("[MQTT] Publish ai failed.");
             allOk = false;
         }
     }
@@ -206,10 +219,10 @@ void loop()
         delay(2000);
 
         if (cacheCount < MAX_CACHE_SIZE) {
-            dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture };
+            dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture, status };
         } else {
             for (int i = 1; i < MAX_CACHE_SIZE; i++) dataCache[i - 1] = dataCache[i];
-            dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture };
+            dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture, status };
         }
 
         if (WiFi.status() != WL_CONNECTED)

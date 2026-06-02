@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Header } from '../components/layout/Header'
-import { StageBadge } from '../components/ui/StageBadge'
+import { HealthBadge } from '../components/ui/StageBadge'
 import { Scene } from '../components/twin/Scene'
 import { useGreenhouseSnapshot } from '../hooks/useGreenhouseData'
 
-const STAGES = ['pinning', 'growing', 'mature', 'overgrown', 'contaminated']
+const STATUSES = ['healthy', 'warning', 'critical']
 
 const MONO = "'JetBrains Mono',monospace"
 
@@ -39,8 +39,7 @@ const DEFAULT_SIM = {
   air_temperature: 24,
   air_humidity:    80,
   soil_moisture:   60,
-  stage:           'growing',
-  confidence:      0.92,
+  status:          'healthy',
   fan:             false,
   mist:            true,
 }
@@ -105,15 +104,15 @@ function SimPanel({ sim, onChange }) {
 
           <div style={{ height: 1, background: '#EAEDEA', margin: '10px 0' }} />
 
-          {/* stage picker */}
-          <p style={{ fontFamily: MONO, fontSize: 9, color: '#9BB09B', letterSpacing: '0.08em', margin: '0 0 6px' }}>ai_stage</p>
+          {/* status picker */}
+          <p style={{ fontFamily: MONO, fontSize: 9, color: '#9BB09B', letterSpacing: '0.08em', margin: '0 0 6px' }}>health_status</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
-            {STAGES.map((s) => (
-              <button key={s} onClick={() => onChange('stage', s)} style={{
+            {STATUSES.map((s) => (
+              <button key={s} onClick={() => onChange('status', s)} style={{
                 fontFamily: MONO, fontSize: 9, padding: '3px 7px', borderRadius: 6,
-                border: `1px solid ${sim.stage === s ? '#16A34A' : '#DDEADD'}`,
-                background: sim.stage === s ? '#F0FFF4' : 'transparent',
-                color: sim.stage === s ? '#16A34A' : '#9BB09B',
+                border: `1px solid ${sim.status === s ? '#16A34A' : '#DDEADD'}`,
+                background: sim.status === s ? '#F0FFF4' : 'transparent',
+                color: sim.status === s ? '#16A34A' : '#9BB09B',
                 cursor: 'pointer', letterSpacing: '0.04em',
               }}>{s}</button>
             ))}
@@ -154,7 +153,7 @@ export function TwinPage() {
 
   const envData     = simMode ? sim                                          : environment
   const devData     = simMode ? { fan: sim.fan, mist: sim.mist }             : devices
-  const aiData      = simMode ? { stage: sim.stage, confidence: sim.confidence } : ai
+  const aiData      = simMode ? { status: sim.status } : ai
 
   const temp   = envData?.air_temperature
   const hum    = envData?.air_humidity
@@ -225,29 +224,13 @@ export function TwinPage() {
             ))}
           </div>
 
-          {aiData?.stage && (
+          {aiData?.status && (
             <>
               <div style={{ height: 1, background: '#EAEDEA', margin: '8px 0' }} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: '#9BB09B', letterSpacing: '0.06em' }}>growth stage</span>
-                <StageBadge stage={aiData.stage} />
+                <span style={{ fontFamily: MONO, fontSize: 10, color: '#9BB09B', letterSpacing: '0.06em' }}>health_status</span>
+                <HealthBadge status={aiData.status} />
               </div>
-              {aiData.confidence != null && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ height: 3, background: '#EAEDEA', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${(aiData.confidence * 100).toFixed(0)}%`,
-                      background: aiData.confidence > 0.9 ? '#16A34A' : aiData.confidence > 0.75 ? '#D97706' : '#DC2626',
-                      borderRadius: 2,
-                      transition: 'width 0.5s ease',
-                    }} />
-                  </div>
-                  <p style={{ fontFamily: MONO, fontSize: 9, color: '#9BB09B', margin: '3px 0 0', textAlign: 'right' }}>
-                    {(aiData.confidence * 100).toFixed(0)}% confidence
-                  </p>
-                </div>
-              )}
             </>
           )}
         </div>
