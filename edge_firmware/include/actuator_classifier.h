@@ -2,17 +2,22 @@
 // Model: Actuator Decision Tree
 // Test accuracy: 87.1%
 // Features: temperature (°C), air_humidity (%), soil_moisture (%)
-// Labels: 0=idle  1=pump  2=fan  3=pump_and_fan
+//
+// Hardware mapping (3 devices):
+//   ACTUATOR_PUMP         → D1 (GPIO 5)  – Water pump relay
+//   ACTUATOR_FAN          → D0 (GPIO 16) + D2 (GPIO 4) – Both cooling fans
+//   ACTUATOR_PUMP_AND_FAN → All 3 devices ON simultaneously
+//   ACTUATOR_IDLE         → All devices OFF
 #pragma once
 #include <stdint.h>
 
 #define N_ACTUATOR_CLASSES 4
 
 enum ActuatorAction : uint8_t {
-    ACTUATOR_IDLE         = 0,
-    ACTUATOR_PUMP         = 1,
-    ACTUATOR_FAN          = 2,
-    ACTUATOR_PUMP_AND_FAN = 3,
+    ACTUATOR_IDLE         = 0,  // All OFF
+    ACTUATOR_PUMP         = 1,  // Water pump ON  (D1)
+    ACTUATOR_FAN          = 2,  // Fan 1 + Fan 2 ON  (D0 + D2)
+    ACTUATOR_PUMP_AND_FAN = 3,  // Pump + both fans ON
 };
 
 static const char* const ACTUATOR_NAMES[] = {

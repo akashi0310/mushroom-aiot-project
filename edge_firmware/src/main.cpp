@@ -12,11 +12,13 @@
 #include "actuator_classifier.h"  // classifyActuator()   → ActuatorAction
 
 // ── Hardware pins ─────────────────────────────────────────────────────────────
-// Pump relay: GPIO 14 (NodeMCU D5) – active HIGH
-// Fan  relay: GPIO 12 (NodeMCU D6) – active HIGH
-//   (Relay modules are usually active-LOW; invert PUMP_ON/FAN_ON if needed)
-#define PUMP_PIN  14
-#define FAN_PIN   12
+// D1 (GPIO  5) → Water pump relay  (active HIGH)
+// D0 (GPIO 16) → Cooling fan 1     (active HIGH)
+// D2 (GPIO  4) → Cooling fan 2     (active HIGH)
+// NOTE: If using active-LOW relay modules, swap HIGH↔LOW in applyActuatorAction()
+#define PUMP_PIN  5    // D1
+#define FAN1_PIN  16   // D0
+#define FAN2_PIN  4    // D2
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
@@ -77,16 +79,19 @@ void reconnectMQTT() {
     }
 }
 
-// Apply actuator decision: drive relay pins and report to serial.
+// Apply actuator decision: drive 3 relay pins and report to serial.
+// Fan signal always activates BOTH fans simultaneously (D0 + D2).
 void applyActuatorAction(ActuatorAction action) {
     bool pump = (action == ACTUATOR_PUMP)         || (action == ACTUATOR_PUMP_AND_FAN);
     bool fan  = (action == ACTUATOR_FAN)          || (action == ACTUATOR_PUMP_AND_FAN);
 
     digitalWrite(PUMP_PIN, pump ? HIGH : LOW);
-    digitalWrite(FAN_PIN,  fan  ? HIGH : LOW);
+    digitalWrite(FAN1_PIN, fan  ? HIGH : LOW);  // Fan 1 (D0)
+    digitalWrite(FAN2_PIN, fan  ? HIGH : LOW);  // Fan 2 (D2)
 
-    Serial.printf("[ACT] pump=%s  fan=%s  (%s)\n",
+    Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
                   pump ? "ON" : "OFF",
+                  fan  ? "ON" : "OFF",
                   fan  ? "ON" : "OFF",
                   ACTUATOR_NAMES[action]);
 }
@@ -115,11 +120,15 @@ bool publishTelemetry(const SensorData& d, HealthStatus health, ActuatorAction a
 
     // ── actuator topic ────────────────────────────────────────────────────────
     {
+        bool pump = (action == ACTUATOR_PUMP || action == ACTUATOR_PUMP_AND_FAN);
+        bool fan  = (action == ACTUATOR_FAN  || action == ACTUATOR_PUMP_AND_FAN);
+
         JsonDocument doc;
-        doc["timestamp"]      = d.timestamp;
-        doc["actuator"]       = ACTUATOR_NAMES[action];
-        doc["pump"]           = (action == ACTUATOR_PUMP || action == ACTUATOR_PUMP_AND_FAN);
-        doc["fan"]            = (action == ACTUATOR_FAN  || action == ACTUATOR_PUMP_AND_FAN);
+        doc["timestamp"] = d.timestamp;
+        doc["actuator"]  = ACTUATOR_NAMES[action];
+        doc["pump"]      = pump;   // D1
+        doc["fan1"]      = fan;    // D0
+        doc["fan2"]      = fan;    // D2
 
         String payload;
         serializeJson(doc, payload);
@@ -140,11 +149,10 @@ void setup() {
     digitalWrite(SOIL_POWER_PIN, LOW);
     pinMode(DHTPIN, INPUT_PULLUP);
 
-    // Actuator relay pins – start OFF
-    pinMode(PUMP_PIN, OUTPUT);
-    pinMode(FAN_PIN,  OUTPUT);
-    digitalWrite(PUMP_PIN, LOW);
-    digitalWrite(FAN_PIN,  LOW);
+    // Actuator relay pins – start all OFF (pump D1, fan1 D0, fan2 D2)
+    pinMode(PUMP_PIN, OUTPUT);  digitalWrite(PUMP_PIN, LOW);
+    pinMode(FAN1_PIN, OUTPUT);  digitalWrite(FAN1_PIN, LOW);
+    pinMode(FAN2_PIN, OUTPUT);  digitalWrite(FAN2_PIN, LOW);
 
     Serial.begin(9600);
     delay(1000);
