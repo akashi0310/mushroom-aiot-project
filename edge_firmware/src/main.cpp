@@ -12,13 +12,8 @@
 #include "actuator_classifier.h"  // classifyActuator()   → ActuatorAction
 
 // ── Hardware pins ─────────────────────────────────────────────────────────────
-// D1 (GPIO  5) → Water pump relay  (active HIGH)
-// D0 (GPIO 16) → Cooling fan 1     (active HIGH)
-// D2 (GPIO  4) → Cooling fan 2     (active HIGH)
-// NOTE: If using active-LOW relay modules, swap HIGH↔LOW in applyActuatorAction()
-#define PUMP_PIN  5    // D1
-#define FAN1_PIN  16   // D0
-#define FAN2_PIN  4    // D2
+// PUMP_PIN (D1), FAN1_PIN (D0), FAN2_PIN (D2) are defined in config.h
+// NOTE: If using active-LOW relay modules, swap HIGH<->LOW in applyActuatorAction()
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;

@@ -4,12 +4,15 @@
 const char *const WIFI_SSID = "USTH_Student";
 const char *const WIFI_PASSWORD = "usth2021!";
 
-#define DHTPIN 2
-#define DHTTYPE DHT11
-#define RELAY_PIN D1
-#define RELAY_FAN D2
+#define DHTPIN          2
+#define DHTTYPE         DHT11
 
-#define SOIL_POWER_PIN 0
+// Actuator pins (relay modules)
+#define PUMP_PIN  D1   // GPIO  5 – Water pump
+#define FAN1_PIN  D0   // GPIO 16 – Cooling fan 1
+#define FAN2_PIN  D2   // GPIO  4 – Cooling fan 2
+
+#define SOIL_POWER_PIN  0
 #define SOIL_ANALOG_PIN A0
 
 const unsigned long SAMPLING_INTERVAL = 5000;
