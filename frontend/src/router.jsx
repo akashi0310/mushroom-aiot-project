@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
+import { AIPage }          from './pages/AIPage'
 import { ControlPage }     from './pages/ControlPage'
 import { DashboardPage }   from './pages/DashboardPage'
 import { DevicesPage }     from './pages/DevicesPage'
@@ -27,6 +28,7 @@ export function AppRouter() {
       <Route path="/"            element={<DashboardPage />}   />
       <Route path="/environment" element={<EnvironmentPage />} />
       <Route path="/devices"     element={<DevicesPage />}     />
+      <Route path="/ai"          element={<AIPage />}          />
       <Route path="/control"     element={<ControlPage />}     />
       <Route path="/twin"        element={
         <Suspense fallback={<TwinFallback />}>
