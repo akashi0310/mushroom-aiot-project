@@ -7,7 +7,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-#include "plant_classifier.h" 
+#include "plant_classifier.h"
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
@@ -76,7 +76,7 @@ void reconnectMQTT()
             connectToWiFi();
         }
         Serial.print("[MQTT] Connecting to Broker...");
-        
+
         // Using static buffer instead of dynamic String manipulation to protect heap memory
         char clientBuf[32];
         snprintf(clientBuf, sizeof(clientBuf), "ESP8266Client-%04X", (uint16_t)random(0, 0xffff));
@@ -99,25 +99,31 @@ void reconnectMQTT()
     }
 }
 
-bool flushCache(SensorData* dataArray, int count) {
-    if (!mqttClient.connected()) {
+bool flushCache(SensorData *dataArray, int count)
+{
+    if (!mqttClient.connected())
+    {
         reconnectMQTT();
     }
 
     bool allOk = true;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
+    {
         JsonDocument doc;
-        doc["timestamp"]       = dataArray[i].timestamp;
+        doc["timestamp"] = dataArray[i].timestamp;
         doc["air_temperature"] = dataArray[i].air_temperature;
-        doc["air_humidity"]    = dataArray[i].air_humidity;
-        doc["soil_moisture"]   = dataArray[i].soil_moisture;
+        doc["air_humidity"] = dataArray[i].air_humidity;
+        doc["soil_moisture"] = dataArray[i].soil_moisture;
 
         String payload;
         serializeJson(doc, payload);
 
-        if (mqttClient.publish(TOPIC_ENV, payload.c_str())) {
+        if (mqttClient.publish(TOPIC_ENV, payload.c_str()))
+        {
             Serial.printf("[MQTT] Published: %s\n", payload.c_str());
-        } else {
+        }
+        else
+        {
             Serial.println("[MQTT] Publish failed.");
             allOk = false;
         }
@@ -131,10 +137,12 @@ void setup()
     digitalWrite(SOIL_POWER_PIN, LOW);
     pinMode(RELAY_PIN, OUTPUT);
     pinMode(RELAY_FAN, OUTPUT);
+    pinMode(RELAY_FAN2, OUTPUT);
 
     // Assuming active-low relays: HIGH is OFF
     digitalWrite(RELAY_PIN, HIGH);
     digitalWrite(RELAY_FAN, HIGH);
+    digitalWrite(RELAY_FAN2, HIGH);
 
     pinMode(DHTPIN, INPUT_PULLUP);
 
@@ -143,7 +151,7 @@ void setup()
 
     dht.begin();
     connectToWiFi();
-    
+
     if (WiFi.status() == WL_CONNECTED)
     {
         syncNTPTime();
@@ -170,19 +178,22 @@ void loop()
 
         // Turn on soil sensor briefly to read
         digitalWrite(SOIL_POWER_PIN, HIGH);
-        delay(50); // Small brief window for voltage stabilization 
+        delay(50); // Small brief window for voltage stabilization
 
         int rawSoil = analogRead(SOIL_ANALOG_PIN);
         digitalWrite(SOIL_POWER_PIN, LOW); // Turn off to prevent corrosion
-        
+
         float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
-        if (soilMoisture > 100) soilMoisture = 100;
-        if (soilMoisture < 0)   soilMoisture = 0;
+        if (soilMoisture > 100)
+            soilMoisture = 100;
+        if (soilMoisture < 0)
+            soilMoisture = 0;
 
         float air_h = dht.readHumidity();
         float air_t = dht.readTemperature();
 
-        if (isnan(air_h) || isnan(air_t)) {
+        if (isnan(air_h) || isnan(air_t))
+        {
             Serial.println("[ERROR] Failed to read DHT11 sensor!");
             return;
         }
@@ -191,35 +202,43 @@ void loop()
 
         Serial.printf(
             "[ENV] %.1f°C  %.1f%%  soil:%.1f%%  => %s\n",
-            air_t, air_h, soilMoisture, HEALTH_NAMES[status]
-        );
+            air_t, air_h, soilMoisture, HEALTH_NAMES[status]);
 
         time_t now = time(nullptr);
 
         // Trigger Actuators (Non-blocking tracking begins)
         actuatorsActive = true;
         actuatorStartTime = currentMillis;
-        
+
         // Active-low logic: LOW turns ON
         digitalWrite(RELAY_PIN, LOW);  // Pump ON
         digitalWrite(RELAY_FAN, LOW);  // Fan ON
+        digitalWrite(RELAY_FAN2, LOW); // Fan ON
         Serial.println("[ACTUATORS] Pump and Fan Turned ON");
 
         // Array Cache management
-        if (cacheCount < MAX_CACHE_SIZE) {
-            dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture };
-        } else {
-            for (int i = 1; i < MAX_CACHE_SIZE; i++) dataCache[i - 1] = dataCache[i];
-            dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture };
+        if (cacheCount < MAX_CACHE_SIZE)
+        {
+            dataCache[cacheCount++] = {now, air_t, air_h, soilMoisture};
+        }
+        else
+        {
+            for (int i = 1; i < MAX_CACHE_SIZE; i++)
+                dataCache[i - 1] = dataCache[i];
+            dataCache[MAX_CACHE_SIZE - 1] = {now, air_t, air_h, soilMoisture};
         }
 
         if (WiFi.status() != WL_CONNECTED)
         {
             connectToWiFi();
-        } else {
-            if (now < 8 * 3600 * 2) syncNTPTime();
+        }
+        else
+        {
+            if (now < 8 * 3600 * 2)
+                syncNTPTime();
 
-            if (cacheCount > 0 && flushCache(dataCache, cacheCount)) {
+            if (cacheCount > 0 && flushCache(dataCache, cacheCount))
+            {
                 cacheCount = 0;
             }
         }
@@ -231,14 +250,17 @@ void loop()
         unsigned long elapsed = currentMillis - actuatorStartTime;
 
         // Turn off Pump after 2 seconds
-        if (elapsed >= PUMP_RUN_DURATION && digitalRead(RELAY_PIN) == LOW) {
+        if (elapsed >= PUMP_RUN_DURATION && digitalRead(RELAY_PIN) == LOW)
+        {
             digitalWrite(RELAY_PIN, HIGH); // Pump OFF
             Serial.println("[ACTUATORS] Pump Turned OFF");
         }
 
         // Turn off Fan after 4 seconds total
-        if (elapsed >= FAN_RUN_DURATION) {
-            digitalWrite(RELAY_FAN, HIGH); // Fan OFF
+        if (elapsed >= FAN_RUN_DURATION)
+        {
+            digitalWrite(RELAY_FAN, HIGH);  // Fan OFF
+            digitalWrite(RELAY_FAN2, HIGH); // Fan OFF
             Serial.println("[ACTUATORS] Fan Turned OFF");
             actuatorsActive = false; // Routine completed
         }
