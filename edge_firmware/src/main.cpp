@@ -99,9 +99,9 @@ void applyActuatorAction(ActuatorAction action)
     bool pump = (action == ACTUATOR_PUMP) || (action == ACTUATOR_PUMP_AND_FAN);
     bool fan  = (action == ACTUATOR_FAN)  || (action == ACTUATOR_PUMP_AND_FAN);
 
-    digitalWrite(PUMP_PIN, pump ? RELAY_ON : RELAY_OFF);
-    digitalWrite(FAN1_PIN, fan  ? RELAY_ON : RELAY_OFF);
-    digitalWrite(FAN2_PIN, fan  ? RELAY_ON : RELAY_OFF);
+    digitalWrite(PUMP_PIN, pump ? RELAY_ON  : RELAY_OFF);
+    digitalWrite(FAN1_PIN, fan  ? RELAY_OFF : RELAY_ON);   // fan relay is active-HIGH
+    digitalWrite(FAN2_PIN, fan  ? RELAY_OFF : RELAY_ON);   // fan relay is active-HIGH
 
     Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
                   pump ? "ON" : "OFF",
