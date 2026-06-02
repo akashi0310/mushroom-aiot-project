@@ -8,89 +8,37 @@
 
 #define N_ACTUATOR_CLASSES 4
 
-enum ActuatorAction : uint8_t {
-    ACTUATOR_IDLE         = 0,
-    ACTUATOR_PUMP         = 1,
-    ACTUATOR_FAN          = 2,
-    ACTUATOR_PUMP_AND_FAN = 3,
+enum ActuatorAction : uint8_t
+{
+    ACTUATOR_IDLE = 0,         // All OFF
+    ACTUATOR_PUMP = 1,         // Water pump ON  (D1)
+    ACTUATOR_FAN = 2,          // Fan 1 + Fan 2 ON  (D0 + D2)
+    ACTUATOR_PUMP_AND_FAN = 3, // Pump + both fans ON
 };
 
-static const char* const ACTUATOR_NAMES[] = {
-    "idle", "pump", "fan", "pump_and_fan"
-};
+static const char *const ACTUATOR_NAMES[] = {
+    "idle", "pump", "fan", "pump_and_fan"};
 
 inline ActuatorAction classifyActuator(
     float temperature,
     float air_humidity,
-    float soil_moisture
-) {
-    if (air_humidity <= 56.9768f) {
-        if (temperature <= 23.5748f) {
-            if (air_humidity <= 43.0167f) {
-                if (soil_moisture <= 32.3057f) {
-                    if (temperature <= 20.3524f) {
-                        return ACTUATOR_IDLE;  // idle
-                    } else {
-                        return ACTUATOR_PUMP_AND_FAN;  // pump_and_fan
-                    }
-                } else {
-                    return ACTUATOR_FAN;  // fan
-                }
-            } else {
-                if (soil_moisture <= 14.1963f) {
-                    return ACTUATOR_PUMP;  // pump
-                } else {
-                    return ACTUATOR_IDLE;  // idle
-                }
-            }
-        } else {
-            if (soil_moisture <= 14.2846f) {
-                return ACTUATOR_PUMP_AND_FAN;  // pump_and_fan
-            } else {
-                if (soil_moisture <= 32.9554f) {
-                    if (soil_moisture <= 19.9733f) {
-                        return ACTUATOR_FAN;  // fan
-                    } else {
-                        return ACTUATOR_PUMP_AND_FAN;  // pump_and_fan
-                    }
-                } else {
-                    if (temperature <= 24.0812f) {
-                        return ACTUATOR_IDLE;  // idle
-                    } else {
-                        return ACTUATOR_FAN;  // fan
-                    }
-                }
-            }
-        }
-    } else {
-        if (soil_moisture <= 14.2087f) {
-            return ACTUATOR_PUMP;  // pump
-        } else {
-            if (soil_moisture <= 32.9742f) {
-                if (soil_moisture <= 20.0086f) {
-                    if (temperature <= 29.3405f) {
-                        return ACTUATOR_IDLE;  // idle
-                    } else {
-                        return ACTUATOR_FAN;  // fan
-                    }
-                } else {
-                    if (soil_moisture <= 24.2512f) {
-                        return ACTUATOR_PUMP;  // pump
-                    } else {
-                        return ACTUATOR_IDLE;  // idle
-                    }
-                }
-            } else {
-                if (temperature <= 27.7705f) {
-                    return ACTUATOR_IDLE;  // idle
-                } else {
-                    if (air_humidity <= 61.8026f) {
-                        return ACTUATOR_FAN;  // fan
-                    } else {
-                        return ACTUATOR_IDLE;  // idle
-                    }
-                }
-            }
-        }
-    }
+    float soil_moisture)
+{
+    const bool soilDry = soil_moisture < 25.0f;
+    const bool hot = temperature > 30.0f;
+    const bool lowHumidity = air_humidity < 50.0f;
+
+    // Very dry + hot
+    if (soilDry && hot)
+        return ACTUATOR_PUMP_AND_FAN;
+
+    // Dry soil
+    if (soilDry)
+        return ACTUATOR_PUMP;
+
+    // Hot air or low humidity
+    if (hot || lowHumidity)
+        return ACTUATOR_FAN;
+
+    return ACTUATOR_IDLE;
 }
