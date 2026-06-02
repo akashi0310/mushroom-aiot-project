@@ -29,23 +29,36 @@ Thresholds  thresholds;
 unsigned long lastConfigMs = 0;   // millis() when last config was received
 
 // ─── Command override state ───────────────────────────────────────────────────
-bool cmdFanOn  = false;
-bool cmdPumpOn = false;
-unsigned long pumpAutoOffAt = 0;  // millis() target; 0 = no timer
+//
+// Priority (highest → lowest):
+//   1. CMD_ON / CMD_OFF  — explicit user command, overrides mode bidirectionally
+//   2. Mode logic        — off / auto / manual thresholds
+//   3. Watchdog fallback — AUTO classify if backend silent > CONFIG_WATCHDOG_MS
+//
+// Timer expiry releases command back to CMD_NONE (→ mode decides),
+// NOT to CMD_OFF, so plants continue being cared for by the active mode.
+
+enum CmdState : int8_t { CMD_NONE = -1, CMD_OFF = 0, CMD_ON = 1 };
+
+CmdState      cmdFan        = CMD_NONE;
+CmdState      cmdPump       = CMD_NONE;
+unsigned long pumpAutoOffAt = 0;   // millis() target; 0 = no timer
 
 // ─── Resolve actuator action ──────────────────────────────────────────────────
 
 ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
 {
-    // Watchdog: if config hasn't arrived for CONFIG_WATCHDOG_MS, fall back to AUTO
-    bool watchdogTripped = (lastConfigMs > 0) && (millis() - lastConfigMs > CONFIG_WATCHDOG_MS);
-    if (watchdogTripped && currentMode != MODE_AUTO) {
-        Serial.println("[WDG] No config heartbeat — falling back to AUTO classify.");
+    // ── Layer 2: Mode logic ──────────────────────────────────────────────────
+    // Watchdog: revert to AUTO if backend hasn't sent config for too long
+    bool watchdog = (lastConfigMs > 0) &&
+                    (millis() - lastConfigMs > CONFIG_WATCHDOG_MS) &&
+                    (currentMode != MODE_AUTO);
+    if (watchdog) {
+        Serial.println("[WDG] Config timeout — fallback to AUTO classify.");
     }
 
-    // Derive base pump/fan from mode
     bool basePump = false, baseFan = false;
-    if (watchdogTripped || currentMode == MODE_AUTO) {
+    if (watchdog || currentMode == MODE_AUTO) {
         ActuatorAction a = classifyActuator(temp, hum, soil);
         basePump = (a == ACTUATOR_PUMP) || (a == ACTUATOR_PUMP_AND_FAN);
         baseFan  = (a == ACTUATOR_FAN)  || (a == ACTUATOR_PUMP_AND_FAN);
@@ -53,11 +66,11 @@ ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
         basePump = soil < thresholds.soil_pump_on;
         baseFan  = (temp > thresholds.temp_fan_on) || (hum < thresholds.humidity_fan_on);
     }
-    // MODE_OFF → basePump/Fan stay false
+    // MODE_OFF → base stays false
 
-    // Apply command overrides on top of mode logic
-    bool pump = basePump || cmdPumpOn;
-    bool fan  = baseFan  || cmdFanOn;
+    // ── Layer 1: Command override (wins over mode) ────────────────────────────
+    bool pump = (cmdPump == CMD_NONE) ? basePump : (cmdPump == CMD_ON);
+    bool fan  = (cmdFan  == CMD_NONE) ? baseFan  : (cmdFan  == CMD_ON);
 
     if (pump && fan) return ACTUATOR_PUMP_AND_FAN;
     if (pump)        return ACTUATOR_PUMP;
@@ -95,21 +108,27 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length)
 
     } else if (strcmp(topic, TOPIC_COMMAND) == 0) {
         const char* device = doc["device"] | "";
-        bool        state  = doc["state"]  | false;
-        int         dur    = doc["duration"] | 0;  // seconds
+        // state: true=CMD_ON, false=CMD_OFF, absent=CMD_NONE (release)
+        CmdState newState = CMD_NONE;
+        if (doc.containsKey("state")) {
+            newState = doc["state"].as<bool>() ? CMD_ON : CMD_OFF;
+        }
+        int dur = doc["duration"] | 0;  // seconds
 
         if (strcmp(device, "fan") == 0) {
-            cmdFanOn = state;
-            Serial.printf("[CMD] fan=%s\n", state ? "ON" : "OFF");
+            cmdFan = newState;
+            Serial.printf("[CMD] fan=%s (priority over mode)\n",
+                          newState == CMD_ON ? "FORCE_ON" : newState == CMD_OFF ? "FORCE_OFF" : "RELEASE");
 
         } else if (strcmp(device, "pump") == 0) {
-            cmdPumpOn = state;
-            if (state && dur > 0) {
+            cmdPump = newState;
+            if (newState == CMD_ON && dur > 0) {
                 pumpAutoOffAt = millis() + (unsigned long)dur * 1000UL;
-                Serial.printf("[CMD] pump=ON  auto-off in %ds\n", dur);
+                Serial.printf("[CMD] pump=FORCE_ON  auto-release in %ds\n", dur);
             } else {
                 pumpAutoOffAt = 0;
-                Serial.printf("[CMD] pump=%s  (no timer)\n", state ? "ON" : "OFF");
+                Serial.printf("[CMD] pump=%s\n",
+                              newState == CMD_ON ? "FORCE_ON" : newState == CMD_OFF ? "FORCE_OFF" : "RELEASE");
             }
         }
     }
@@ -320,11 +339,13 @@ void setup()
 
 void loop()
 {
-    // 0. PUMP AUTO-OFF TIMER
-    if (cmdPumpOn && pumpAutoOffAt > 0 && millis() >= pumpAutoOffAt) {
-        cmdPumpOn     = false;
+    // 0. PUMP AUTO-RELEASE TIMER
+    // On expiry: release command (CMD_NONE) so mode logic resumes.
+    // NOT CMD_OFF — mode may legitimately keep pump running (e.g. dry soil in AUTO).
+    if (cmdPump == CMD_ON && pumpAutoOffAt > 0 && millis() >= pumpAutoOffAt) {
+        cmdPump       = CMD_NONE;
         pumpAutoOffAt = 0;
-        Serial.println("[CMD] Pump auto-off timer expired — pump OFF.");
+        Serial.println("[CMD] Pump timer expired — released to mode logic.");
     }
 
     // 1. NON-BLOCKING CONNECTION MANAGER

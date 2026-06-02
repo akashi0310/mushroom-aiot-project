@@ -110,8 +110,9 @@ export function ControlPage() {
   const [statusMsg,  setStatusMsg]  = useState('')
 
   // Remote control toggle state
-  const [fanOn,       setFanOn]       = useState(false)
-  const [pumpOn,      setPumpOn]      = useState(false)
+  // null = released to mode, true = CMD_ON, false = CMD_OFF
+  const [fanOn,       setFanOn]       = useState(null)
+  const [pumpOn,      setPumpOn]      = useState(null)
   const [pumpDur,     setPumpDur]     = useState(120)   // seconds
   const [pumpCountdown, setPumpCountdown] = useState(0) // seconds remaining
   const countdownRef = useRef(null)
@@ -135,30 +136,36 @@ export function ControlPage() {
     setThresholds((prev) => ({ ...prev, [key]: value }))
   }
 
-  // Fan toggle
+  // Fan toggle: null→ON, ON→OFF, OFF→null (cycle through states)
   async function handleFanToggle() {
-    const next = !fanOn
+    const next = fanOn === null ? true : fanOn === true ? false : null
+    const prev = fanOn
     setFanOn(next)
     try {
-      await api.sendCommand({ device: 'fan', state: next, duration: 0 })
+      const payload = next === null
+        ? { device: 'fan', state: false }   // release = send false, firmware maps to CMD_NONE via absent key
+        : { device: 'fan', state: next }
+      await api.sendCommand(payload)
     } catch {
-      setFanOn(!next) // revert on error
+      setFanOn(prev)
     }
   }
 
-  // Pump toggle with auto-off countdown
+  // Pump toggle: null→ON (with timer), ON→OFF, OFF→null
   async function handlePumpToggle() {
-    const next = !pumpOn
+    const next = pumpOn === null ? true : pumpOn === true ? false : null
+    const prev = pumpOn
     setPumpOn(next)
     clearInterval(countdownRef.current)
 
-    if (next) {
+    if (next === true) {
       setPumpCountdown(pumpDur)
       countdownRef.current = setInterval(() => {
         setPumpCountdown((c) => {
           if (c <= 1) {
             clearInterval(countdownRef.current)
-            setPumpOn(false)
+            // Release to mode (not force-off) — firmware does the same
+            setPumpOn(null)
             return 0
           }
           return c - 1
@@ -169,9 +176,12 @@ export function ControlPage() {
     }
 
     try {
-      await api.sendCommand({ device: 'pump', state: next, duration: next ? pumpDur : 0 })
+      const payload = next === null
+        ? { device: 'pump', state: false }           // release to mode
+        : { device: 'pump', state: next, duration: next === true ? pumpDur : 0 }
+      await api.sendCommand(payload)
     } catch {
-      setPumpOn(!next)
+      setPumpOn(prev)
       clearInterval(countdownRef.current)
       setPumpCountdown(0)
     }
@@ -229,13 +239,13 @@ export function ControlPage() {
                 style={{
                   fontFamily: MONO, fontSize: 11, fontWeight: 700,
                   letterSpacing: '0.10em', padding: '8px 20px', borderRadius: 6,
-                  border: `2px solid ${fanOn ? 'rgba(217,119,6,0.35)' : '#DDEADD'}`,
-                  background: fanOn ? 'rgba(217,119,6,0.10)' : '#F5F6F8',
-                  color: fanOn ? '#D97706' : '#9BB09B',
-                  cursor: 'pointer', transition: 'all 0.18s', minWidth: 80,
+                  border: `2px solid ${fanOn === true ? 'rgba(217,119,6,0.35)' : fanOn === false ? 'rgba(220,38,38,0.30)' : '#DDEADD'}`,
+                  background: fanOn === true ? 'rgba(217,119,6,0.10)' : fanOn === false ? 'rgba(220,38,38,0.07)' : '#F5F6F8',
+                  color: fanOn === true ? '#D97706' : fanOn === false ? '#DC2626' : '#9BB09B',
+                  cursor: 'pointer', transition: 'all 0.18s', minWidth: 90,
                 }}
               >
-                {fanOn ? '● ON' : '○ OFF'}
+                {fanOn === true ? '▲ FORCE ON' : fanOn === false ? '▼ FORCE OFF' : '— AUTO'}
               </button>
             </div>
 
@@ -280,15 +290,15 @@ export function ControlPage() {
                   style={{
                     fontFamily: MONO, fontSize: 11, fontWeight: 700,
                     letterSpacing: '0.10em', padding: '8px 20px', borderRadius: 6,
-                    border: `2px solid ${pumpOn ? 'rgba(8,145,178,0.35)' : '#DDEADD'}`,
-                    background: pumpOn ? 'rgba(8,145,178,0.10)' : '#F5F6F8',
-                    color: pumpOn ? '#0891B2' : '#9BB09B',
-                    cursor: 'pointer', transition: 'all 0.18s', minWidth: 80,
+                    border: `2px solid ${pumpOn === true ? 'rgba(8,145,178,0.35)' : pumpOn === false ? 'rgba(220,38,38,0.30)' : '#DDEADD'}`,
+                    background: pumpOn === true ? 'rgba(8,145,178,0.10)' : pumpOn === false ? 'rgba(220,38,38,0.07)' : '#F5F6F8',
+                    color: pumpOn === true ? '#0891B2' : pumpOn === false ? '#DC2626' : '#9BB09B',
+                    cursor: 'pointer', transition: 'all 0.18s', minWidth: 90,
                   }}
                 >
-                  {pumpOn ? '● ON' : '○ OFF'}
+                  {pumpOn === true ? '▲ FORCE ON' : pumpOn === false ? '▼ FORCE OFF' : '— AUTO'}
                 </button>
-                {pumpOn && pumpCountdown > 0 && (
+                {pumpOn === true && pumpCountdown > 0 && (
                   <span style={{ fontFamily: MONO, fontSize: 10, color: '#0891B2' }}>
                     auto-off {pumpCountdown < 60
                       ? `${pumpCountdown}s`
