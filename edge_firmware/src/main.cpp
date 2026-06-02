@@ -24,60 +24,95 @@ struct Thresholds {
     float soil_pump_on    = 25.0f;  // % — pump ON below this
 };
 
-ControlMode currentMode = MODE_AUTO;
+ControlMode currentMode   = MODE_AUTO;
 Thresholds  thresholds;
+unsigned long lastConfigMs = 0;   // millis() when last config was received
 
-// Resolve actuator action based on current mode
+// ─── Command override state ───────────────────────────────────────────────────
+bool cmdFanOn  = false;
+bool cmdPumpOn = false;
+unsigned long pumpAutoOffAt = 0;  // millis() target; 0 = no timer
+
+// ─── Resolve actuator action ──────────────────────────────────────────────────
+
 ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
 {
-    switch (currentMode)
-    {
-        case MODE_OFF:
-            return ACTUATOR_IDLE;
-
-        case MODE_AUTO:
-            return classifyActuator(temp, hum, soil);
-
-        case MODE_MANUAL: {
-            bool pump = soil < thresholds.soil_pump_on;
-            bool fan  = (temp > thresholds.temp_fan_on) || (hum < thresholds.humidity_fan_on);
-            if (pump && fan) return ACTUATOR_PUMP_AND_FAN;
-            if (pump)        return ACTUATOR_PUMP;
-            if (fan)         return ACTUATOR_FAN;
-            return ACTUATOR_IDLE;
-        }
+    // Watchdog: if config hasn't arrived for CONFIG_WATCHDOG_MS, fall back to AUTO
+    bool watchdogTripped = (lastConfigMs > 0) && (millis() - lastConfigMs > CONFIG_WATCHDOG_MS);
+    if (watchdogTripped && currentMode != MODE_AUTO) {
+        Serial.println("[WDG] No config heartbeat — falling back to AUTO classify.");
     }
+
+    // Derive base pump/fan from mode
+    bool basePump = false, baseFan = false;
+    if (watchdogTripped || currentMode == MODE_AUTO) {
+        ActuatorAction a = classifyActuator(temp, hum, soil);
+        basePump = (a == ACTUATOR_PUMP) || (a == ACTUATOR_PUMP_AND_FAN);
+        baseFan  = (a == ACTUATOR_FAN)  || (a == ACTUATOR_PUMP_AND_FAN);
+    } else if (currentMode == MODE_MANUAL) {
+        basePump = soil < thresholds.soil_pump_on;
+        baseFan  = (temp > thresholds.temp_fan_on) || (hum < thresholds.humidity_fan_on);
+    }
+    // MODE_OFF → basePump/Fan stay false
+
+    // Apply command overrides on top of mode logic
+    bool pump = basePump || cmdPumpOn;
+    bool fan  = baseFan  || cmdFanOn;
+
+    if (pump && fan) return ACTUATOR_PUMP_AND_FAN;
+    if (pump)        return ACTUATOR_PUMP;
+    if (fan)         return ACTUATOR_FAN;
     return ACTUATOR_IDLE;
 }
 
-// MQTT message callback — handles config topic
+// ─── MQTT message callback ────────────────────────────────────────────────────
+
 void onMqttMessage(char* topic, byte* payload, unsigned int length)
 {
-    if (strcmp(topic, TOPIC_CONFIG) != 0) return;
-
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload, length);
     if (err) {
-        Serial.printf("[CFG] JSON parse error: %s\n", err.c_str());
+        Serial.printf("[MQTT] JSON error on %s: %s\n", topic, err.c_str());
         return;
     }
 
-    const char* mode = doc["mode"] | "auto";
-    if      (strcmp(mode, "off")    == 0) currentMode = MODE_OFF;
-    else if (strcmp(mode, "manual") == 0) currentMode = MODE_MANUAL;
-    else                                   currentMode = MODE_AUTO;
+    if (strcmp(topic, TOPIC_CONFIG) == 0) {
+        const char* mode = doc["mode"] | "auto";
+        if      (strcmp(mode, "off")    == 0) currentMode = MODE_OFF;
+        else if (strcmp(mode, "manual") == 0) currentMode = MODE_MANUAL;
+        else                                   currentMode = MODE_AUTO;
 
-    if (doc.containsKey("thresholds")) {
-        thresholds.temp_fan_on     = doc["thresholds"]["temp_fan_on"]     | 30.0f;
-        thresholds.humidity_fan_on = doc["thresholds"]["humidity_fan_on"] | 50.0f;
-        thresholds.soil_pump_on    = doc["thresholds"]["soil_pump_on"]    | 25.0f;
+        if (doc.containsKey("thresholds")) {
+            thresholds.temp_fan_on     = doc["thresholds"]["temp_fan_on"]     | 30.0f;
+            thresholds.humidity_fan_on = doc["thresholds"]["humidity_fan_on"] | 50.0f;
+            thresholds.soil_pump_on    = doc["thresholds"]["soil_pump_on"]    | 25.0f;
+        }
+
+        lastConfigMs = millis();  // reset watchdog
+        Serial.printf("[CFG] mode=%s  temp_fan>%.1f  hum_fan<%.1f  soil_pump<%.1f\n",
+                      mode, thresholds.temp_fan_on,
+                      thresholds.humidity_fan_on, thresholds.soil_pump_on);
+
+    } else if (strcmp(topic, TOPIC_COMMAND) == 0) {
+        const char* device = doc["device"] | "";
+        bool        state  = doc["state"]  | false;
+        int         dur    = doc["duration"] | 0;  // seconds
+
+        if (strcmp(device, "fan") == 0) {
+            cmdFanOn = state;
+            Serial.printf("[CMD] fan=%s\n", state ? "ON" : "OFF");
+
+        } else if (strcmp(device, "pump") == 0) {
+            cmdPumpOn = state;
+            if (state && dur > 0) {
+                pumpAutoOffAt = millis() + (unsigned long)dur * 1000UL;
+                Serial.printf("[CMD] pump=ON  auto-off in %ds\n", dur);
+            } else {
+                pumpAutoOffAt = 0;
+                Serial.printf("[CMD] pump=%s  (no timer)\n", state ? "ON" : "OFF");
+            }
+        }
     }
-
-    Serial.printf("[CFG] mode=%s  temp_fan>%.1f  hum_fan<%.1f  soil_pump<%.1f\n",
-                  mode,
-                  thresholds.temp_fan_on,
-                  thresholds.humidity_fan_on,
-                  thresholds.soil_pump_on);
 }
 
 struct SensorData
@@ -151,7 +186,8 @@ void reconnectMQTT()
         if (mqttClient.connect(clientBuf, MQTT_USER, MQTT_PASSWORD))
         {
             Serial.println("Connected!");
-            mqttClient.subscribe(TOPIC_CONFIG);  // receive control config from backend
+            mqttClient.subscribe(TOPIC_CONFIG);    // retained config from backend
+            mqttClient.subscribe(TOPIC_COMMAND);   // ephemeral device commands
         }
         else
         {
@@ -284,6 +320,13 @@ void setup()
 
 void loop()
 {
+    // 0. PUMP AUTO-OFF TIMER
+    if (cmdPumpOn && pumpAutoOffAt > 0 && millis() >= pumpAutoOffAt) {
+        cmdPumpOn     = false;
+        pumpAutoOffAt = 0;
+        Serial.println("[CMD] Pump auto-off timer expired — pump OFF.");
+    }
+
     // 1. NON-BLOCKING CONNECTION MANAGER
     if (WiFi.status() == WL_CONNECTED)
     {

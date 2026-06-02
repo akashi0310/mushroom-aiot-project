@@ -33,5 +33,9 @@ const char *const TOPIC_ENV     = "mushroom-farm/rack-1/environment";
 const char *const TOPIC_AI      = "mushroom-farm/rack-1/ai";
 const char *const TOPIC_DEVICES = "mushroom-farm/rack-1/devices";
 const char *const TOPIC_CONFIG  = "mushroom-farm/rack-1/config";
+const char *const TOPIC_COMMAND = "mushroom-farm/rack-1/command";
+
+// Watchdog: revert to AUTO if no MQTT config received within this window
+const unsigned long CONFIG_WATCHDOG_MS = 5UL * 60UL * 1000UL;  // 5 minutes
 
 #endif

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Header } from '../components/layout/Header'
 import { api } from '../services/api'
 import { useGreenhouseStore } from '../store/useGreenhouseStore'
@@ -35,6 +35,14 @@ const MODES = [
     bg:   'rgba(217,119,6,0.07)',
     border: 'rgba(217,119,6,0.25)',
   },
+]
+
+const PUMP_DURATIONS = [
+  { label: '30s',  value: 30  },
+  { label: '1 min', value: 60  },
+  { label: '2 min', value: 120 },
+  { label: '5 min', value: 300 },
+  { label: '10 min',value: 600 },
 ]
 
 const DEFAULT_THRESHOLDS = {
@@ -101,6 +109,13 @@ export function ControlPage() {
   const [status,     setStatus]     = useState(null)  // null | 'ok' | 'warn' | 'error'
   const [statusMsg,  setStatusMsg]  = useState('')
 
+  // Remote control toggle state
+  const [fanOn,       setFanOn]       = useState(false)
+  const [pumpOn,      setPumpOn]      = useState(false)
+  const [pumpDur,     setPumpDur]     = useState(120)   // seconds
+  const [pumpCountdown, setPumpCountdown] = useState(0) // seconds remaining
+  const countdownRef = useRef(null)
+
   // Seed from store (comes via Socket.IO) or REST on first load
   useEffect(() => {
     if (storeControl) {
@@ -119,6 +134,51 @@ export function ControlPage() {
   function handleThreshold(key, value) {
     setThresholds((prev) => ({ ...prev, [key]: value }))
   }
+
+  // Fan toggle
+  async function handleFanToggle() {
+    const next = !fanOn
+    setFanOn(next)
+    try {
+      await api.sendCommand({ device: 'fan', state: next, duration: 0 })
+    } catch {
+      setFanOn(!next) // revert on error
+    }
+  }
+
+  // Pump toggle with auto-off countdown
+  async function handlePumpToggle() {
+    const next = !pumpOn
+    setPumpOn(next)
+    clearInterval(countdownRef.current)
+
+    if (next) {
+      setPumpCountdown(pumpDur)
+      countdownRef.current = setInterval(() => {
+        setPumpCountdown((c) => {
+          if (c <= 1) {
+            clearInterval(countdownRef.current)
+            setPumpOn(false)
+            return 0
+          }
+          return c - 1
+        })
+      }, 1000)
+    } else {
+      setPumpCountdown(0)
+    }
+
+    try {
+      await api.sendCommand({ device: 'pump', state: next, duration: next ? pumpDur : 0 })
+    } catch {
+      setPumpOn(!next)
+      clearInterval(countdownRef.current)
+      setPumpCountdown(0)
+    }
+  }
+
+  // Cleanup countdown on unmount
+  useEffect(() => () => clearInterval(countdownRef.current), [])
 
   async function handleApply() {
     setLoading(true)
@@ -148,6 +208,97 @@ export function ControlPage() {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <Header title="control" />
       <main style={{ flex: 1, padding: 24, overflowY: 'auto', background: '#F5F6F8' }}>
+
+        {/* Remote control toggles */}
+        <section style={{ marginBottom: 28 }}>
+          <SectionLabel>// remote_control</SectionLabel>
+          <div style={{ ...CARD, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Fan toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <p style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: '#1A261A', margin: '0 0 2px' }}>
+                  cooling_fan
+                </p>
+                <p style={{ fontFamily: "'Inter',sans-serif", fontSize: 12, color: '#9BB09B', margin: 0 }}>
+                  Toggle regardless of mode — no auto-off
+                </p>
+              </div>
+              <button
+                onClick={handleFanToggle}
+                style={{
+                  fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.10em', padding: '8px 20px', borderRadius: 6,
+                  border: `2px solid ${fanOn ? 'rgba(217,119,6,0.35)' : '#DDEADD'}`,
+                  background: fanOn ? 'rgba(217,119,6,0.10)' : '#F5F6F8',
+                  color: fanOn ? '#D97706' : '#9BB09B',
+                  cursor: 'pointer', transition: 'all 0.18s', minWidth: 80,
+                }}
+              >
+                {fanOn ? '● ON' : '○ OFF'}
+              </button>
+            </div>
+
+            <div style={{ height: 1, background: '#EAEDEA' }} />
+
+            {/* Pump toggle + duration */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: '#1A261A', margin: '0 0 2px' }}>
+                  water_pump
+                </p>
+                <p style={{ fontFamily: "'Inter',sans-serif", fontSize: 12, color: '#9BB09B', margin: '0 0 10px' }}>
+                  Auto-off after selected duration
+                </p>
+                {/* Duration selector */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {PUMP_DURATIONS.map((d) => (
+                    <button
+                      key={d.value}
+                      onClick={() => { if (!pumpOn) setPumpDur(d.value) }}
+                      disabled={pumpOn}
+                      style={{
+                        fontFamily: MONO, fontSize: 9, fontWeight: 600,
+                        padding: '4px 10px', borderRadius: 5,
+                        border: `1px solid ${pumpDur === d.value ? '#0891B2' : '#DDEADD'}`,
+                        background: pumpDur === d.value ? 'rgba(8,145,178,0.08)' : 'transparent',
+                        color: pumpDur === d.value ? '#0891B2' : '#9BB09B',
+                        cursor: pumpOn ? 'not-allowed' : 'pointer',
+                        opacity: pumpOn ? 0.5 : 1,
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                <button
+                  onClick={handlePumpToggle}
+                  style={{
+                    fontFamily: MONO, fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.10em', padding: '8px 20px', borderRadius: 6,
+                    border: `2px solid ${pumpOn ? 'rgba(8,145,178,0.35)' : '#DDEADD'}`,
+                    background: pumpOn ? 'rgba(8,145,178,0.10)' : '#F5F6F8',
+                    color: pumpOn ? '#0891B2' : '#9BB09B',
+                    cursor: 'pointer', transition: 'all 0.18s', minWidth: 80,
+                  }}
+                >
+                  {pumpOn ? '● ON' : '○ OFF'}
+                </button>
+                {pumpOn && pumpCountdown > 0 && (
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: '#0891B2' }}>
+                    auto-off {pumpCountdown < 60
+                      ? `${pumpCountdown}s`
+                      : `${Math.floor(pumpCountdown / 60)}m ${pumpCountdown % 60}s`}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Mode selector */}
         <section style={{ marginBottom: 28 }}>

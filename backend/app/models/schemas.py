@@ -19,6 +19,12 @@ class ControlPayload(BaseModel):
     thresholds: ThresholdsPayload = Field(default_factory=ThresholdsPayload)
 
 
+class CommandPayload(BaseModel):
+    device:   str  = Field(..., pattern="^(fan|pump)$", description="fan or pump")
+    state:    bool
+    duration: int  = Field(0, ge=0, le=3600, description="seconds before auto-off; 0 = no timer")
+
+
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
 
 class EnvironmentPayload(BaseModel):

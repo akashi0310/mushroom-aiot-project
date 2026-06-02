@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 from app.core.config import settings
 from app.core.store import store
 from app.models.enums import MQTTStatus
-from app.models.schemas import AIPayload, ControlPayload, DevicesPayload, EnvironmentPayload
+from app.models.schemas import AIPayload, CommandPayload, ControlPayload, DevicesPayload, EnvironmentPayload
 
 _loop: asyncio.AbstractEventLoop | None = None
 _client: mqtt.Client | None = None
@@ -26,6 +26,15 @@ def _push_state() -> None:
     if _loop and not _loop.is_closed():
         from app.services.broadcaster import broadcast_state
         asyncio.run_coroutine_threadsafe(broadcast_state(), _loop)
+
+
+def publish_command(payload: CommandPayload) -> bool:
+    """Publish a one-shot device command (ephemeral, no retain)."""
+    if _client is None or not _client.is_connected():
+        return False
+    raw = json.dumps(payload.model_dump(mode="json"))
+    result = _client.publish(settings.topic_command, raw, qos=1, retain=False)
+    return result.rc == mqtt.MQTT_ERR_SUCCESS
 
 
 def publish_control(payload: ControlPayload) -> bool:
