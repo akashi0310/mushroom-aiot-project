@@ -4,11 +4,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Text } from 'react-native'
 
-import { DashboardScreen } from './src/screens/DashboardScreen'
+import { DashboardScreen }   from './src/screens/DashboardScreen'
 import { EnvironmentScreen } from './src/screens/EnvironmentScreen'
-import { DevicesScreen } from './src/screens/DevicesScreen'
-import { TwinScreen } from './src/screens/TwinScreen'
-import { useSocket } from './src/hooks/useSocket'
+import { DevicesScreen }     from './src/screens/DevicesScreen'
+import { AIScreen }          from './src/screens/AIScreen'
+import { ControlScreen }     from './src/screens/ControlScreen'
+import { TwinScreen }        from './src/screens/TwinScreen'
+import { useSocket }         from './src/hooks/useSocket'
 
 const Tab = createBottomTabNavigator()
 
@@ -44,9 +46,13 @@ function AppNavigator() {
       <Tab.Screen name="Dashboard"   component={DashboardScreen}
         options={{ tabBarLabel: 'dashboard',   tabBarIcon: ({ color }) => <TabIcon icon="⬡" color={color} /> }} />
       <Tab.Screen name="Environment" component={EnvironmentScreen}
-        options={{ tabBarLabel: 'environment', tabBarIcon: ({ color }) => <TabIcon icon="〰" color={color} /> }} />
+        options={{ tabBarLabel: 'environ',     tabBarIcon: ({ color }) => <TabIcon icon="〰" color={color} /> }} />
       <Tab.Screen name="Devices"     component={DevicesScreen}
         options={{ tabBarLabel: 'devices',     tabBarIcon: ({ color }) => <TabIcon icon="◈" color={color} /> }} />
+      <Tab.Screen name="AI"          component={AIScreen}
+        options={{ tabBarLabel: 'ai_health',   tabBarIcon: ({ color }) => <TabIcon icon="◆" color={color} /> }} />
+      <Tab.Screen name="Control"     component={ControlScreen}
+        options={{ tabBarLabel: 'control',     tabBarIcon: ({ color }) => <TabIcon icon="⊡" color={color} /> }} />
       <Tab.Screen name="Twin"        component={TwinScreen}
         options={{ tabBarLabel: 'twin',        tabBarIcon: ({ color }) => <TabIcon icon="◉" color={color} /> }} />
     </Tab.Navigator>

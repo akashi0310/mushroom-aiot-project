@@ -4,6 +4,7 @@ export const useGreenhouseStore = create((set) => ({
   environment: null,
   devices:     null,
   ai:          null,
+  control:     null,
   lastUpdated: null,
   envHistory:  [],
   devHistory:  [],
@@ -11,6 +12,9 @@ export const useGreenhouseStore = create((set) => ({
 
   setFromSocketEvent: (payload) => set((state) => {
     const next = { lastUpdated: payload.last_updated ?? state.lastUpdated }
+    if (payload.control) {
+      next.control = payload.control
+    }
     if (payload.environment) {
       next.environment = payload.environment
       next.envHistory  = [...state.envHistory, payload.environment].slice(-200)

@@ -37,14 +37,14 @@ export function DevicesScreen() {
         <Text style={styles.sectionLabel}>// relay_status</Text>
         <RelayCard name="cooling_fan" state={data?.fan} activeColor="#D97706" description="Triggers when temp > 29°C or humidity > 93%" />
         <View style={{ height: 12 }} />
-        <RelayCard name="mist_system" state={data?.mist} activeColor="#0891B2" description="Triggers when humidity < 80%" />
+        <RelayCard name="water_pump" state={data?.pump} activeColor="#0891B2" description="Triggers when soil moisture < 25%" />
 
         <Text style={[styles.sectionLabel, { marginTop: 20 }]}>// state_changes · {history.length} records</Text>
         <View style={styles.tableCard}>
           <View style={styles.tableHeader}>
             <Text style={[styles.th, { flex: 2 }]}>time</Text>
             <Text style={[styles.th, styles.thCenter]}>fan</Text>
-            <Text style={[styles.th, styles.thCenter]}>mist</Text>
+            <Text style={[styles.th, styles.thCenter]}>pump</Text>
           </View>
           {recentHistory.length === 0 ? (
             <Text style={styles.empty}>no_data_yet</Text>
@@ -52,7 +52,7 @@ export function DevicesScreen() {
             <View key={i} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
               <Text style={[styles.tdTime, { flex: 2 }]}>{new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>
               <Text style={[styles.tdStatus, { color: r.fan ? '#D97706' : '#D0D8D0' }]}>{r.fan ? '● ON' : '○ off'}</Text>
-              <Text style={[styles.tdStatus, { color: r.mist ? '#0891B2' : '#D0D8D0' }]}>{r.mist ? '● ON' : '○ off'}</Text>
+              <Text style={[styles.tdStatus, { color: r.pump ? '#0891B2' : '#D0D8D0' }]}>{r.pump ? '● ON' : '○ off'}</Text>
             </View>
           ))}
         </View>
