@@ -123,7 +123,7 @@ print("\nStep 4 – Training Actuator Decision Tree")
 # must learn the joint feature interactions between temperature, humidity, and
 # soil – rather than collapsing to one-feature splits.
 dt_act = DecisionTreeClassifier(
-    max_depth=8,
+    max_depth=5,
     min_samples_leaf=4,
     class_weight="balanced",
     random_state=42,

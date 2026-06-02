@@ -7,13 +7,8 @@
 #include <ArduinoJson.h>
 #include <time.h>
 
-// ── ML classifiers (auto-generated from Python training pipeline) ─────────────
-#include "plant_classifier.h"     // classifyPlantHealth() → HealthStatus
-#include "actuator_classifier.h"  // classifyActuator()   → ActuatorAction
-
-// ── Hardware pins ─────────────────────────────────────────────────────────────
-// PUMP_PIN (D1), FAN1_PIN (D0), FAN2_PIN (D2) are defined in config.h
-// NOTE: If using active-LOW relay modules, swap HIGH<->LOW in applyActuatorAction()
+#include "plant_classifier.h"     // classifyPlantHealth() -> HealthStatus
+#include "actuator_classifier.h"  // classifyActuator()   -> ActuatorAction
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClientSecure espClient;
@@ -21,16 +16,15 @@ PubSubClient mqttClient(espClient);
 
 struct SensorData {
     time_t timestamp;
-    float  air_temperature;
-    float  air_humidity;
-    float  soil_moisture;
+    float air_temperature;
+    float air_humidity;
+    float soil_moisture;
 };
 
 SensorData dataCache[MAX_CACHE_SIZE];
 int cacheCount = 0;
 unsigned long lastSampleTime = 0;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 void syncNTPTime() {
     Serial.println("[NTP] Synchronizing real time...");
     configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -62,27 +56,30 @@ void connectToWiFi() {
 
 void reconnectMQTT() {
     while (!mqttClient.connected()) {
-        if (WiFi.status() != WL_CONNECTED) connectToWiFi();
+        if (WiFi.status() != WL_CONNECTED) {
+            connectToWiFi();
+        }
         Serial.print("[MQTT] Connecting to broker...");
         String clientId = "ESP8266-" + String(random(0, 0xffff), HEX);
         if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
             Serial.println("connected!");
         } else {
-            Serial.printf("failed, rc=%d  retrying in 5s...\n", mqttClient.state());
+            Serial.print("failed, rc=");
+            Serial.print(mqttClient.state());
+            Serial.println(" retrying in 5s...");
             delay(5000);
         }
     }
 }
 
-// Apply actuator decision: drive 3 relay pins and report to serial.
-// Fan signal always activates BOTH fans simultaneously (D0 + D2).
+// Apply actuator decision: drive pump (D1) + both fans (D0, D2)
 void applyActuatorAction(ActuatorAction action) {
-    bool pump = (action == ACTUATOR_PUMP)         || (action == ACTUATOR_PUMP_AND_FAN);
-    bool fan  = (action == ACTUATOR_FAN)          || (action == ACTUATOR_PUMP_AND_FAN);
+    bool pump = (action == ACTUATOR_PUMP) || (action == ACTUATOR_PUMP_AND_FAN);
+    bool fan  = (action == ACTUATOR_FAN)  || (action == ACTUATOR_PUMP_AND_FAN);
 
     digitalWrite(PUMP_PIN, pump ? RELAY_ON : RELAY_OFF);
-    digitalWrite(FAN1_PIN, fan  ? RELAY_ON : RELAY_OFF);  // Fan 1 (D0)
-    digitalWrite(FAN2_PIN, fan  ? RELAY_ON : RELAY_OFF);  // Fan 2 (D2)
+    digitalWrite(FAN1_PIN, fan  ? RELAY_ON : RELAY_OFF);
+    digitalWrite(FAN2_PIN, fan  ? RELAY_ON : RELAY_OFF);
 
     Serial.printf("[ACT] pump=%s  fan1=%s  fan2=%s  (%s)\n",
                   pump ? "ON" : "OFF",
@@ -91,60 +88,39 @@ void applyActuatorAction(ActuatorAction action) {
                   ACTUATOR_NAMES[action]);
 }
 
-// Publish sensor + actuator state as JSON to MQTT.
-bool publishTelemetry(const SensorData& d, HealthStatus health, ActuatorAction action) {
-    if (!mqttClient.connected()) reconnectMQTT();
+// Flush cached sensor data to MQTT
+bool flushCache(SensorData* dataArray, int count) {
+    if (!mqttClient.connected()) {
+        reconnectMQTT();
+    }
 
-    // ── environment topic ────────────────────────────────────────────────────
-    {
+    bool allOk = true;
+    for (int i = 0; i < count; i++) {
         JsonDocument doc;
-        doc["timestamp"]       = d.timestamp;
-        doc["air_temperature"] = d.air_temperature;
-        doc["air_humidity"]    = d.air_humidity;
-        doc["soil_moisture"]   = d.soil_moisture;
-        doc["health_status"]   = HEALTH_NAMES[health];
+        doc["timestamp"]       = dataArray[i].timestamp;
+        doc["air_temperature"] = dataArray[i].air_temperature;
+        doc["air_humidity"]    = dataArray[i].air_humidity;
+        doc["soil_moisture"]   = dataArray[i].soil_moisture;
 
         String payload;
         serializeJson(doc, payload);
-        if (!mqttClient.publish(TOPIC_ENV, payload.c_str())) {
-            Serial.println("[MQTT] Env publish failed.");
-            return false;
+
+        if (mqttClient.publish(TOPIC_ENV, payload.c_str())) {
+            Serial.printf("[MQTT] Published: %s\n", payload.c_str());
+        } else {
+            Serial.println("[MQTT] Publish failed.");
+            allOk = false;
         }
-        Serial.printf("[MQTT->env] %s\n", payload.c_str());
     }
-
-    // ── actuator topic ────────────────────────────────────────────────────────
-    {
-        bool pump = (action == ACTUATOR_PUMP || action == ACTUATOR_PUMP_AND_FAN);
-        bool fan  = (action == ACTUATOR_FAN  || action == ACTUATOR_PUMP_AND_FAN);
-
-        JsonDocument doc;
-        doc["timestamp"] = d.timestamp;
-        doc["actuator"]  = ACTUATOR_NAMES[action];
-        doc["pump"]      = pump;   // D1
-        doc["fan1"]      = fan;    // D0
-        doc["fan2"]      = fan;    // D2
-
-        String payload;
-        serializeJson(doc, payload);
-        if (!mqttClient.publish(TOPIC_ACT, payload.c_str())) {
-            Serial.println("[MQTT] Actuator publish failed.");
-            return false;
-        }
-        Serial.printf("[MQTT->act] %s\n", payload.c_str());
-    }
-
-    return true;
+    return allOk;
 }
 
-// ── Arduino lifecycle ─────────────────────────────────────────────────────────
 void setup() {
-    // Soil sensor power control
     pinMode(SOIL_POWER_PIN, OUTPUT);
     digitalWrite(SOIL_POWER_PIN, LOW);
     pinMode(DHTPIN, INPUT_PULLUP);
 
-    // Actuator relay pins – start all OFF (pump D1, fan1 D0, fan2 D2)
+    // Actuator relay pins - start all OFF
     pinMode(PUMP_PIN, OUTPUT);  digitalWrite(PUMP_PIN, RELAY_OFF);
     pinMode(FAN1_PIN, OUTPUT);  digitalWrite(FAN1_PIN, RELAY_OFF);
     pinMode(FAN2_PIN, OUTPUT);  digitalWrite(FAN2_PIN, RELAY_OFF);
@@ -155,70 +131,71 @@ void setup() {
     dht.begin();
 
     connectToWiFi();
-    if (WiFi.status() == WL_CONNECTED) syncNTPTime();
+    if (WiFi.status() == WL_CONNECTED) {
+        syncNTPTime();
+    }
 
-    espClient.setInsecure();   // TLS without cert validation (ESP8266 limitation)
+    // TLS encrypted but skip certificate verification
+    // (ESP8266 BearSSL can't easily load CA cert at runtime)
+    espClient.setInsecure();
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
 
 void loop() {
-    if (!mqttClient.connected()) reconnectMQTT();
+    if (!mqttClient.connected()) {
+        reconnectMQTT();
+    }
     mqttClient.loop();
 
-    unsigned long now_ms = millis();
-    if (now_ms - lastSampleTime < SAMPLING_INTERVAL) return;
-    lastSampleTime = now_ms;
+    unsigned long currentMillis = millis();
 
-    // ── 1. Read sensors ───────────────────────────────────────────────────────
-    digitalWrite(SOIL_POWER_PIN, HIGH);
-    delay(200);
-    int   rawSoil      = analogRead(SOIL_ANALOG_PIN);
-    float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
-    soilMoisture = constrain(soilMoisture, 0.0f, 100.0f);
-    digitalWrite(SOIL_POWER_PIN, LOW);   // Save power
+    if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL) {
+        lastSampleTime = currentMillis;
 
-    float air_h = dht.readHumidity();
-    float air_t = dht.readTemperature();
-    if (isnan(air_h) || isnan(air_t)) {
-        Serial.println("[ERROR] Failed to read DHT11 sensor!");
-        return;
-    }
+        digitalWrite(SOIL_POWER_PIN, HIGH);
+        delay(200);
 
-    // ── 2. Run ML classifiers ─────────────────────────────────────────────────
-    HealthStatus  health = classifyPlantHealth(air_t, air_h, soilMoisture);
-    ActuatorAction action = classifyActuator   (air_t, air_h, soilMoisture);
+        int rawSoil = analogRead(SOIL_ANALOG_PIN);
+        float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
+        if (soilMoisture > 100) soilMoisture = 100;
+        if (soilMoisture < 0)   soilMoisture = 0;
 
-    Serial.printf("[ENV] %.1fC  %.1f%%RH  soil:%.1f%%  health:%s\n",
-                  air_t, air_h, soilMoisture, HEALTH_NAMES[health]);
+        float air_h = dht.readHumidity();
+        float air_t = dht.readTemperature();
 
-    // ── 3. Apply actuator decision ────────────────────────────────────────────
-    applyActuatorAction(action);
+        if (isnan(air_h) || isnan(air_t)) {
+            Serial.println("[ERROR] Failed to read DHT11 sensor!");
+            return;
+        }
 
-    // ── 4. Cache & publish ────────────────────────────────────────────────────
-    time_t now = time(nullptr);
-    SensorData sd = { now, air_t, air_h, soilMoisture };
+        // Run ML classifiers
+        HealthStatus status = classifyPlantHealth(air_t, air_h, soilMoisture);
+        ActuatorAction action = classifyActuator(air_t, air_h, soilMoisture);
 
-    // Circular cache
-    if (cacheCount < MAX_CACHE_SIZE) {
-        dataCache[cacheCount++] = sd;
-    } else {
-        for (int i = 1; i < MAX_CACHE_SIZE; i++) dataCache[i - 1] = dataCache[i];
-        dataCache[MAX_CACHE_SIZE - 1] = sd;
-    }
+        Serial.printf("[ENV] %.1fC  %.1f%%  soil:%.1f%%  => %s\n",
+                      air_t, air_h, soilMoisture, HEALTH_NAMES[status]);
 
-    if (WiFi.status() != WL_CONNECTED) {
-        connectToWiFi();
-    } else {
-        if (now < 8 * 3600 * 2) syncNTPTime();
+        // Apply actuator decision from ML model
+        applyActuatorAction(action);
 
-        // Flush cached readings (use the current action for each; in a richer
-        // implementation you would store the action alongside each sample)
-        if (cacheCount > 0) {
-            bool ok = true;
-            for (int i = 0; i < cacheCount && ok; i++) {
-                ok = publishTelemetry(dataCache[i], health, action);
+        // Cache data
+        time_t now = time(nullptr);
+
+        if (cacheCount < MAX_CACHE_SIZE) {
+            dataCache[cacheCount++] = { now, air_t, air_h, soilMoisture };
+        } else {
+            for (int i = 1; i < MAX_CACHE_SIZE; i++) dataCache[i - 1] = dataCache[i];
+            dataCache[MAX_CACHE_SIZE - 1] = { now, air_t, air_h, soilMoisture };
+        }
+
+        if (WiFi.status() != WL_CONNECTED) {
+            connectToWiFi();
+        } else {
+            if (now < 8 * 3600 * 2) syncNTPTime();
+
+            if (cacheCount > 0 && flushCache(dataCache, cacheCount)) {
+                cacheCount = 0;
             }
-            if (ok) cacheCount = 0;
         }
     }
 }
