@@ -26,18 +26,30 @@ SensorData dataCache[MAX_CACHE_SIZE];
 int cacheCount = 0;
 unsigned long lastSampleTime = 0;
 
+// Non-blocking states for actuators
+bool actuatorsActive = false;
+unsigned long actuatorStartTime = 0;
+const unsigned long PUMP_RUN_DURATION = 2000; // 2 seconds
+const unsigned long FAN_RUN_DURATION = 4000;  // 4 seconds total action time
+
 void syncNTPTime()
 {
     Serial.println("[NTP] Synchronizing real time...");
     configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     time_t now = time(nullptr);
-    while (now < 8 * 3600 * 2)
+    int retry = 0;
+    while (now < 8 * 3600 * 2 && retry < 10)
     {
         delay(500);
         Serial.print(".");
         now = time(nullptr);
+        retry++;
     }
-    Serial.println("\n[NTP] Synchronization complete!");
+    if (now >= 8 * 3600 * 2) {
+        Serial.println("\n[NTP] Synchronization complete!");
+    } else {
+        Serial.println("\n[NTP] Synchronization timeout. Will retry later.");
+    }
 }
 
 void connectToWiFi()
@@ -48,6 +60,7 @@ void connectToWiFi()
     Serial.println(WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    
     int attempt = 0;
     while (WiFi.status() != WL_CONNECTED && attempt < 30)
     {
@@ -63,24 +76,26 @@ void connectToWiFi()
 
 void reconnectMQTT()
 {
-    while (!mqttClient.connected())
+    // Do not attempt to connect MQTT if Wi-Fi itself isn't physically linked up yet
+    if (WiFi.status() != WL_CONNECTED) 
+        return;
+
+    if (!mqttClient.connected())
     {
-        if (WiFi.status() != WL_CONNECTED)
+        Serial.print("[MQTT] Connecting to Broker...");
+
+        char clientBuf[32];
+        snprintf(clientBuf, sizeof(clientBuf), "ESP8266Client-%04X", (uint16_t)random(0, 0xffff));
+
+        if (mqttClient.connect(clientBuf, MQTT_USER, MQTT_PASSWORD))
         {
-            connectToWiFi();
-        }
-        Serial.print("[MQTT] Connecting to broker...");
-        String clientId = "ESP8266-" + String(random(0, 0xffff), HEX);
-        if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD))
-        {
-            Serial.println("connected!");
+            Serial.println("Connected!");
         }
         else
         {
             Serial.print("failed, rc=");
             Serial.print(mqttClient.state());
-            Serial.println(" retrying in 5s...");
-            delay(5000);
+            Serial.println(" Will retry next cycle.");
         }
     }
 }
@@ -108,6 +123,7 @@ bool flushCache(SensorData *dataArray, int count)
     if (!mqttClient.connected())
     {
         reconnectMQTT();
+        if (!mqttClient.connected()) return false;
     }
 
     bool allOk = true;
@@ -124,12 +140,20 @@ bool flushCache(SensorData *dataArray, int count)
 
         if (mqttClient.publish(TOPIC_ENV, payload.c_str()))
         {
-            Serial.printf("[MQTT] Published: %s\n", payload.c_str());
+            Serial.printf("[MQTT] Published Cached: %s\n", payload.c_str());
         }
         else
         {
-            Serial.println("[MQTT] Publish failed.");
+            Serial.println("[MQTT] Publish failed during cache flush.");
             allOk = false;
+            
+            // Re-align the cache: move untransmitted elements to the front
+            int unspentCount = 0;
+            for (int j = i; j < count; j++) {
+                dataArray[unspentCount++] = dataArray[j];
+            }
+            cacheCount = unspentCount;
+            return false;
         }
     }
     return allOk;
@@ -153,42 +177,59 @@ void setup()
     delay(1000);
 
     dht.begin();
-
     connectToWiFi();
+
     if (WiFi.status() == WL_CONNECTED)
     {
         syncNTPTime();
     }
 
-    // TLS encrypted but skip certificate verification
-    // (ESP8266 BearSSL can't easily load CA cert at runtime)
     espClient.setInsecure();
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 }
 
 void loop()
 {
-    if (!mqttClient.connected())
+    // 1. NON-BLOCKING CONNECTION MANAGER
+    if (WiFi.status() == WL_CONNECTED)
     {
-        reconnectMQTT();
+        if (!mqttClient.connected())
+        {
+            static unsigned long lastMqttRetry = 0;
+            // Attempt an MQTT re-link every 5 seconds without freezing execution
+            if (millis() - lastMqttRetry > 5000) {
+                lastMqttRetry = millis();
+                reconnectMQTT();
+            }
+        }
+        else
+        {
+            mqttClient.loop();
+        }
     }
-    mqttClient.loop();
+    else
+    {
+        // Network is down. ESP8266 automatically triggers internal background reconnects 
+        // if WiFi.begin() was executed once during setup. We don't block here.
+    }
 
     unsigned long currentMillis = millis();
 
+    // 2. NON-BLOCKING SAMPLING INTERVAL
     if (currentMillis - lastSampleTime >= SAMPLING_INTERVAL)
     {
         lastSampleTime = currentMillis;
 
+        // Turn on soil sensor briefly to read
         digitalWrite(SOIL_POWER_PIN, HIGH);
-        delay(200);
+        delay(200); // Small brief window for voltage stabilization
 
         int rawSoil = analogRead(SOIL_ANALOG_PIN);
+        digitalWrite(SOIL_POWER_PIN, LOW); // Turn off to prevent corrosion
+
         float soilMoisture = map(rawSoil, 1023, 300, 0, 100);
-        if (soilMoisture > 100)
-            soilMoisture = 100;
-        if (soilMoisture < 0)
-            soilMoisture = 0;
+        if (soilMoisture > 100)  soilMoisture = 100;
+        if (soilMoisture < 0)    soilMoisture = 0;
 
         float air_h = dht.readHumidity();
         float air_t = dht.readTemperature();
@@ -209,33 +250,39 @@ void loop()
         // Apply actuator decision from ML model
         applyActuatorAction(action);
 
-        // Cache data
+        // Cache local data with current time context
         time_t now = time(nullptr);
 
         if (cacheCount < MAX_CACHE_SIZE)
         {
             dataCache[cacheCount++] = {now, air_t, air_h, soilMoisture};
+            Serial.printf("[CACHE] Buffered locally. Size: %d/%d\n", cacheCount, MAX_CACHE_SIZE);
         }
         else
         {
+            // Cache full: Slide everything down (FIFO) and dump oldest record
             for (int i = 1; i < MAX_CACHE_SIZE; i++)
                 dataCache[i - 1] = dataCache[i];
             dataCache[MAX_CACHE_SIZE - 1] = {now, air_t, air_h, soilMoisture};
+            Serial.println("[CACHE] Buffer exceeded! Overwriting historical data point.");
+        }
+    }
+
+    // 3. SEPARATE CACHE FLUSH ROUTINE (Runs automatically whenever online)
+    if (WiFi.status() == WL_CONNECTED && cacheCount > 0)
+    {
+        time_t now = time(nullptr);
+        // If the offline window was long enough to break NTP tracking sync, re-sync it once
+        if (now < 8 * 3600 * 2)
+        {
+            syncNTPTime();
         }
 
-        if (WiFi.status() != WL_CONNECTED)
+        Serial.println("[CACHE] Connection established. Dumping logged metrics...");
+        if (flushCache(dataCache, cacheCount))
         {
-            connectToWiFi();
-        }
-        else
-        {
-            if (now < 8 * 3600 * 2)
-                syncNTPTime();
-
-            if (cacheCount > 0 && flushCache(dataCache, cacheCount))
-            {
-                cacheCount = 0;
-            }
+            cacheCount = 0; // Success! Reset queue size tracker
+            Serial.println("[CACHE] Flush finalized. Memory storage reset.");
         }
     }
 }

@@ -1,11 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-const char *const WIFI_SSID = "USTH_Student";
-const char *const WIFI_PASSWORD = "usth2021!";
+const char *const WIFI_SSID = "Nhat Anh";
+const char *const WIFI_PASSWORD = "12345679";
 
 #define DHTPIN 2
 #define DHTTYPE DHT11
+#define RELAY_PIN D1
+#define RELAY_FAN D2
+#define RELAY_FAN2 D0
 
 // Actuator pins (relay modules)
 #define PUMP_PIN D1 // GPIO  5 – Water pump
