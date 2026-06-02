@@ -109,11 +109,11 @@ export function DashboardPage() {
               note={devices?.fan ? 'relay: active' : 'relay: idle'}
             />
             <MetricCard
-              label="mist system"
-              value={devices ? (devices.mist ? 'ON' : 'OFF') : null}
-              color={devices?.mist ? '#0891B2' : '#9BB09B'}
-              accent={devices?.mist}
-              note={devices?.mist ? 'relay: active' : 'relay: idle'}
+              label="water pump"
+              value={devices ? (devices.pump ? 'ON' : 'OFF') : null}
+              color={devices?.pump ? '#0891B2' : '#9BB09B'}
+              accent={devices?.pump}
+              note={devices?.pump ? 'relay: active' : 'relay: idle'}
             />
           </div>
         </section>

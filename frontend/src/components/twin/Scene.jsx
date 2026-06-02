@@ -443,7 +443,7 @@ function SceneContent({ environment, devices, ai }) {
   const hum    = environment?.air_humidity    ?? 80
   const stage  = ai?.status  ?? null
   const fanOn  = devices?.fan  === true
-  const mistOn = devices?.mist === true
+  const pumpOn = devices?.pump === true
 
   const ts = calcTempStress(temp)
 
@@ -493,7 +493,7 @@ function SceneContent({ environment, devices, ai }) {
       <MushroomBed stage={stage} tempStress={ts} />
       <GrowLight />
       <MiniFan active={fanOn} />
-      <MistParticles active={mistOn} />
+      <MistParticles active={pumpOn} />
       <HeatShimmer stress={ts} />
       <FrostCrystals stress={ts} />
     </>

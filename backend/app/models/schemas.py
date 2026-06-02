@@ -24,7 +24,7 @@ class EnvironmentPayload(BaseModel):
 
 class DevicesPayload(BaseModel):
     fan:  bool
-    mist: bool
+    pump: bool
 
 
 class AIPayload(BaseModel):

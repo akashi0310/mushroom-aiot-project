@@ -7,7 +7,7 @@ import { create } from 'zustand'
 export const useGreenhouseStore = create((set) => ({
   // ── Latest state ────────────────────────────────────────────────────
   environment:  null,   // { air_temperature, air_humidity, soil_moisture, timestamp }
-  devices:      null,   // { fan, mist }
+  devices:      null,   // { fan, pump }
   ai:           null,   // { status: 'healthy' | 'warning' | 'critical' }
   lastUpdated:  null,   // ISO string
 

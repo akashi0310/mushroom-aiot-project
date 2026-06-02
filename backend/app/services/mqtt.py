@@ -65,7 +65,7 @@ def _on_message(client, userdata, msg):
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
             store.update_devices(payload, ts)
-            print(f"[DEV]  fan={payload.fan}  mist={payload.mist}")
+            print(f"[DEV]  fan={payload.fan}  pump={payload.pump}")
 
         elif topic == settings.topic_ai:
             payload = AIPayload(**data)

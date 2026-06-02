@@ -41,7 +41,7 @@ const DEFAULT_SIM = {
   soil_moisture:   60,
   status:          'healthy',
   fan:             false,
-  mist:            true,
+  pump:            true,
 }
 
 function SimSlider({ label, value, min, max, step = 0.5, unit, onChange }) {
@@ -120,7 +120,7 @@ function SimPanel({ sim, onChange }) {
 
           {/* device toggles */}
           <div style={{ display: 'flex', gap: 8 }}>
-            {[['fan', '#D97706'], ['mist', '#0891B2']].map(([key, color]) => (
+            {[['fan', '#D97706'], ['pump', '#0891B2']].map(([key, color]) => (
               <button key={key} onClick={() => onChange(key, !sim[key])} style={{
                 flex: 1, fontFamily: MONO, fontSize: 9, fontWeight: 700,
                 padding: '5px 0', borderRadius: 7,
@@ -152,13 +152,13 @@ export function TwinPage() {
   }
 
   const envData     = simMode ? sim                                          : environment
-  const devData     = simMode ? { fan: sim.fan, mist: sim.mist }             : devices
+  const devData     = simMode ? { fan: sim.fan, pump: sim.pump }             : devices
   const aiData      = simMode ? { status: sim.status } : ai
 
   const temp   = envData?.air_temperature
   const hum    = envData?.air_humidity
   const fanOn  = devData?.fan  === true
-  const mistOn = devData?.mist === true
+  const pumpOn = devData?.pump === true
 
   const tempColor = temp == null ? '#9BB09B'
     : temp > 30 ? '#DC2626'
@@ -213,7 +213,7 @@ export function TwinPage() {
           <div style={{ height: 1, background: '#EAEDEA', margin: '8px 0' }} />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {[['cooling fan', fanOn, devData, '#D97706'], ['mist system', mistOn, devData, '#0891B2']].map(([label, on, src, color]) => (
+            {[['cooling fan', fanOn, devData, '#D97706'], ['water pump', pumpOn, devData, '#0891B2']].map(([label, on, src, color]) => (
               <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: '#9BB09B', letterSpacing: '0.06em' }}>{label}</span>
                 <span style={{ display: 'flex', alignItems: 'center', fontFamily: MONO, fontSize: 11, fontWeight: 600, color: on ? color : '#9BB09B' }}>
