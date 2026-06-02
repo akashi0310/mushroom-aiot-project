@@ -117,19 +117,31 @@ export function ControlPage() {
   const [pumpCountdown, setPumpCountdown] = useState(0) // seconds remaining
   const countdownRef = useRef(null)
 
-  // Seed from store (comes via Socket.IO) or REST on first load
+  // Always fetch REST on mount for fresh config (source of truth)
   useEffect(() => {
-    if (storeControl) {
-      setMode(storeControl.mode)
-      setThresholds({ ...DEFAULT_THRESHOLDS, ...storeControl.thresholds })
-    } else {
-      api.getControl()
-        .then((d) => {
-          setMode(d.mode)
-          setThresholds({ ...DEFAULT_THRESHOLDS, ...d.thresholds })
-        })
-        .catch(() => {})
-    }
+    api.getControl()
+      .then((d) => {
+        setMode(d.mode)
+        setThresholds({ ...DEFAULT_THRESHOLDS, ...d.thresholds })
+      })
+      .catch(() => {
+        // REST failed — fall back to Socket.IO store if available
+        if (storeControl) {
+          setMode(storeControl.mode)
+          setThresholds({ ...DEFAULT_THRESHOLDS, ...storeControl.thresholds })
+        } else {
+          setStatus('error')
+          setStatusMsg('Could not load config — backend unreachable.')
+          setTimeout(() => setStatus(null), 5000)
+        }
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync realtime updates from Socket.IO (another client changed config)
+  useEffect(() => {
+    if (!storeControl) return
+    setMode(storeControl.mode)
+    setThresholds({ ...DEFAULT_THRESHOLDS, ...storeControl.thresholds })
   }, [storeControl])
 
   function handleThreshold(key, value) {
@@ -142,12 +154,14 @@ export function ControlPage() {
     const prev = fanOn
     setFanOn(next)
     try {
-      const payload = next === null
-        ? { device: 'fan', state: false }   // release = send false, firmware maps to CMD_NONE via absent key
-        : { device: 'fan', state: next }
-      await api.sendCommand(payload)
-    } catch {
+      // state: null → backend excludes key → firmware gets CMD_NONE (release to mode)
+      // state: true/false → CMD_ON / CMD_OFF
+      await api.sendCommand({ device: 'fan', state: next })
+    } catch (err) {
       setFanOn(prev)
+      setStatus('error')
+      setStatusMsg(`Fan command failed: ${err?.detail ?? 'MQTT offline'}`)
+      setTimeout(() => setStatus(null), 4000)
     }
   }
 
@@ -176,14 +190,18 @@ export function ControlPage() {
     }
 
     try {
-      const payload = next === null
-        ? { device: 'pump', state: false }           // release to mode
-        : { device: 'pump', state: next, duration: next === true ? pumpDur : 0 }
-      await api.sendCommand(payload)
-    } catch {
+      await api.sendCommand({
+        device: 'pump',
+        state: next,   // null → CMD_NONE (release), true → CMD_ON, false → CMD_OFF
+        ...(next === true && { duration: pumpDur }),
+      })
+    } catch (err) {
       setPumpOn(prev)
       clearInterval(countdownRef.current)
       setPumpCountdown(0)
+      setStatus('error')
+      setStatusMsg(`Pump command failed: ${err?.detail ?? 'MQTT offline'}`)
+      setTimeout(() => setStatus(null), 4000)
     }
   }
 

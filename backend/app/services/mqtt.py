@@ -29,10 +29,12 @@ def _push_state() -> None:
 
 
 def publish_command(payload: CommandPayload) -> bool:
-    """Publish a one-shot device command (ephemeral, no retain)."""
+    """Publish a one-shot device command (ephemeral, no retain).
+    state=None is excluded from JSON so firmware receives CMD_NONE (release to mode).
+    """
     if _client is None or not _client.is_connected():
         return False
-    raw = json.dumps(payload.model_dump(mode="json"))
+    raw = json.dumps(payload.model_dump(mode="json", exclude_none=True))
     result = _client.publish(settings.topic_command, raw, qos=1, retain=False)
     return result.rc == mqtt.MQTT_ERR_SUCCESS
 

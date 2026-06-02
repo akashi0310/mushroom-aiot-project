@@ -20,9 +20,9 @@ class ControlPayload(BaseModel):
 
 
 class CommandPayload(BaseModel):
-    device:   str  = Field(..., pattern="^(fan|pump)$", description="fan or pump")
-    state:    bool
-    duration: int  = Field(0, ge=0, le=3600, description="seconds before auto-off; 0 = no timer")
+    device:   str            = Field(..., pattern="^(fan|pump)$", description="fan or pump")
+    state:    Optional[bool] = Field(None, description="true=CMD_ON, false=CMD_OFF, null=CMD_NONE (release to mode)")
+    duration: int            = Field(0, ge=0, le=3600, description="seconds before auto-off; 0 = no timer")
 
 
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────

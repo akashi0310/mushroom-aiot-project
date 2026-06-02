@@ -29,6 +29,7 @@ export const api = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).then(r => {
-      if (!r.ok) return r.json().then(d => Promise.reject(d))
+      if (r.status === 204) return   // success, no body
+      return r.json().then(d => Promise.reject(d))
     }),
 }
