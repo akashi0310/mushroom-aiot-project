@@ -43,4 +43,11 @@ const char *const TOPIC_COMMAND = "mushroom-farm/rack-1/command";
 // Watchdog: revert to AUTO if no MQTT config received within this window
 const unsigned long CONFIG_WATCHDOG_MS = 5UL * 60UL * 1000UL;  // 5 minutes
 
+// ─── Safety floor (hardcoded, cannot be overridden by any MQTT command) ───────
+// If any condition breaches these critical thresholds, the corresponding
+// actuator is forced ON regardless of mode (off/auto/manual) or command
+// (FORCE_OFF). This is the last line of defence against crop loss.
+const float SAFETY_SOIL_MIN  = 10.0f;  // % — pump ON if soil drops below
+const float SAFETY_TEMP_MAX  = 40.0f;  // °C — fan ON if temp exceeds
+
 #endif

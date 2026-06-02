@@ -50,6 +50,17 @@ unsigned long pumpAutoOffAt = 0;   // millis() target; 0 = no timer
 
 ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
 {
+    // ── Layer 0: Safety floor (HIGHEST priority, cannot be overridden) ────────
+    // Protects plants regardless of mode, command, or network state.
+    bool safetyPump = soil < SAFETY_SOIL_MIN;
+    bool safetyFan  = temp > SAFETY_TEMP_MAX;
+    if (safetyPump || safetyFan) {
+        Serial.printf("[SAFETY] Floor triggered — soil=%.1f%% temp=%.1f°C\n", soil, temp);
+        if (safetyPump && safetyFan) return ACTUATOR_PUMP_AND_FAN;
+        if (safetyPump)              return ACTUATOR_PUMP;
+        return ACTUATOR_FAN;
+    }
+
     // ── Layer 2: Mode logic ──────────────────────────────────────────────────
     // Watchdog: revert to AUTO if backend hasn't sent config for too long
     bool watchdog = (lastConfigMs > 0) &&
