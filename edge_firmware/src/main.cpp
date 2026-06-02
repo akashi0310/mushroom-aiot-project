@@ -81,11 +81,7 @@ void reconnectMQTT()
         char clientBuf[32];
         snprintf(clientBuf, sizeof(clientBuf), "ESP8266Client-%04X", (uint16_t)random(0, 0xffff));
 
-#if defined(MQTT_USER) && defined(MQTT_PASSWORD)
         if (mqttClient.connect(clientBuf, MQTT_USER, MQTT_PASSWORD))
-#else
-        if (mqttClient.connect(clientBuf))
-#endif
         {
             Serial.println("Connected!");
         }
@@ -153,15 +149,6 @@ void setup()
 {
     pinMode(SOIL_POWER_PIN, OUTPUT);
     digitalWrite(SOIL_POWER_PIN, LOW);
-    pinMode(RELAY_PIN, OUTPUT);
-    pinMode(RELAY_FAN, OUTPUT);
-    pinMode(RELAY_FAN2, OUTPUT);
-
-    // Assuming active-low relays: HIGH is OFF
-    digitalWrite(RELAY_PIN, HIGH);
-    digitalWrite(RELAY_FAN, HIGH);
-    digitalWrite(RELAY_FAN2, HIGH);
-
     pinMode(DHTPIN, INPUT_PULLUP);
 
     // Actuator relay pins - start all OFF
@@ -204,7 +191,7 @@ void loop()
 
         // Turn on soil sensor briefly to read
         digitalWrite(SOIL_POWER_PIN, HIGH);
-        delay(50); // Small brief window for voltage stabilization
+        delay(200); // Small brief window for voltage stabilization
 
         int rawSoil = analogRead(SOIL_ANALOG_PIN);
         digitalWrite(SOIL_POWER_PIN, LOW); // Turn off to prevent corrosion
@@ -261,28 +248,6 @@ void loop()
             {
                 cacheCount = 0;
             }
-        }
-    }
-
-    // 2. NON-BLOCKING ACTUATOR DURATIONS STATE-MACHINE
-    if (actuatorsActive)
-    {
-        unsigned long elapsed = currentMillis - actuatorStartTime;
-
-        // Turn off Pump after 2 seconds
-        if (elapsed >= PUMP_RUN_DURATION && digitalRead(RELAY_PIN) == LOW)
-        {
-            digitalWrite(RELAY_PIN, HIGH); // Pump OFF
-            Serial.println("[ACTUATORS] Pump Turned OFF");
-        }
-
-        // Turn off Fan after 4 seconds total
-        if (elapsed >= FAN_RUN_DURATION)
-        {
-            digitalWrite(RELAY_FAN, HIGH);  // Fan OFF
-            digitalWrite(RELAY_FAN2, HIGH); // Fan OFF
-            Serial.println("[ACTUATORS] Fan Turned OFF");
-            actuatorsActive = false; // Routine completed
         }
     }
 }
