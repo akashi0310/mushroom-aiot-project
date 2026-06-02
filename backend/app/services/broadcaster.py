@@ -1,9 +1,13 @@
 import socketio
 
 from app.core.auth import decode_token
+from app.core.config import settings
 from app.core.store import store
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins=settings.cors_origins_list,
+)
 
 
 async def broadcast_state() -> None:
