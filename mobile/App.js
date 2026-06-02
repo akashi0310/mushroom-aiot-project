@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Text } from 'react-native'
 
+import { LoginScreen }       from './src/screens/LoginScreen'
+import { useAuthStore }      from './src/store/useAuthStore'
 import { DashboardScreen }   from './src/screens/DashboardScreen'
 import { EnvironmentScreen } from './src/screens/EnvironmentScreen'
 import { DevicesScreen }     from './src/screens/DevicesScreen'
@@ -60,6 +63,18 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const token = useAuthStore((s) => s.token)
+  const [ready, setReady] = useState(false)
+
+  if (!token) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <LoginScreen onLoginSuccess={() => setReady(true)} />
+      </SafeAreaProvider>
+    )
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>

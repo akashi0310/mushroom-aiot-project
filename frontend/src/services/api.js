@@ -1,35 +1,50 @@
+import { getToken } from '../store/useAuthStore'
+
 const BASE = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000'
 
+function authHeaders(extra = {}) {
+  const token = getToken()
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  }
+}
+
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`)
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
+  if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized') }
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`)
   return res.json()
 }
 
+async function post(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized') }
+  return res
+}
+
 export const api = {
-  health:             ()              => get('/api/health'),
-  state:              ()              => get('/api/state'),
-  environmentHistory: (limit = 100)  => get(`/api/environment/history?limit=${limit}`),
-  devicesHistory:     (limit = 100)  => get(`/api/devices/history?limit=${limit}`),
-  aiHistory:          (limit = 100)  => get(`/api/ai/history?limit=${limit}`),
+  health:             ()             => get('/api/health'),
+  state:              ()             => get('/api/state'),
+  environmentHistory: (limit = 100) => get(`/api/environment/history?limit=${limit}`),
+  devicesHistory:     (limit = 100) => get(`/api/devices/history?limit=${limit}`),
+  aiHistory:          (limit = 100) => get(`/api/ai/history?limit=${limit}`),
 
   getControl: () => get('/api/control'),
   setControl: (payload) =>
-    fetch(`${BASE}/api/control`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).then(r => {
+    post('/api/control', payload).then(r => {
       if (r.status === 503) return r.json().then(d => ({ _mqttDown: true, ...d }))
       if (!r.ok) throw new Error(`POST /api/control → ${r.status}`)
       return r.json()
     }),
 
   sendCommand: (payload) =>
-    fetch(`${BASE}/api/control/command`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).then(r => {
-      if (r.status === 204) return   // success, no body
+    post('/api/control/command', payload).then(r => {
+      if (r.status === 204) return
       return r.json().then(d => Promise.reject(d))
     }),
 }

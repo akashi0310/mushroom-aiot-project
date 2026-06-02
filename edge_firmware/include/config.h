@@ -1,8 +1,13 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-const char *const WIFI_SSID = "Nhat Anh";
-const char *const WIFI_PASSWORD = "12345679";
+// ─── WiFi (managed by WiFiManager — no hardcoded credentials) ────────────────
+// On first boot or failed connection: device starts AP "Mushroom-Farm-Setup"
+// Connect to it, open 192.168.4.1, enter WiFi credentials.
+// Credentials are saved to flash and reused on subsequent boots.
+#define WIFI_AP_NAME     "Mushroom-Farm-Setup"
+#define WIFI_AP_PASSWORD "mushroom2024"   // AP password for config portal
+#define WIFI_PORTAL_TIMEOUT 120           // seconds before AP auto-closes
 
 #define DHTPIN 2
 #define DHTTYPE DHT11

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { AIPage }          from './pages/AIPage'
 import { ControlPage }     from './pages/ControlPage'
+import { LoginPage }       from './pages/LoginPage'
 import { DashboardPage }   from './pages/DashboardPage'
 import { DevicesPage }     from './pages/DevicesPage'
 import { EnvironmentPage } from './pages/EnvironmentPage'
@@ -25,6 +26,7 @@ function TwinFallback() {
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="/login"       element={<LoginPage />}        />
       <Route path="/"            element={<DashboardPage />}   />
       <Route path="/environment" element={<EnvironmentPage />} />
       <Route path="/devices"     element={<DevicesPage />}     />

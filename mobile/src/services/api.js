@@ -1,7 +1,17 @@
+import { getToken } from '../store/useAuthStore'
+
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
+function authHeaders(extra = {}) {
+  const token = getToken()
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  }
+}
+
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`)
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`)
   return res.json()
 }
@@ -9,7 +19,7 @@ async function get(path) {
 async function post(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   if (res.status === 204) return null
@@ -25,7 +35,6 @@ export const api = {
 
   getControl: ()        => get('/api/control'),
   setControl: (payload) => post('/api/control', payload).catch(e => {
-    // 503 = config saved, MQTT offline — treat as warning not error
     if (e?.detail) return { _mqttDown: true, ...e }
     throw e
   }),

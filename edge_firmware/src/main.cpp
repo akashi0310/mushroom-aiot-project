@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include "config.h"
+#include "certs.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
+#include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
@@ -170,24 +172,18 @@ void syncNTPTime()
 
 void connectToWiFi()
 {
-    if (WiFi.status() == WL_CONNECTED)
-        return;
-    Serial.print("[NETWORK] Connecting to Wi-Fi: ");
-    Serial.println(WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFiManager wm;
+    wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT);
 
-    int attempt = 0;
-    while (WiFi.status() != WL_CONNECTED && attempt < 30)
+    // Non-blocking AP mode: if autoConnect fails (timeout), restart and try again
+    Serial.println("[NETWORK] Starting WiFiManager...");
+    if (!wm.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD))
     {
-        delay(500);
-        Serial.print(".");
-        attempt++;
+        Serial.println("[NETWORK] WiFiManager timed out, restarting...");
+        ESP.restart();
     }
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        Serial.println("\n[NETWORK] Wi-Fi connected!");
-    }
+    Serial.print("[NETWORK] Connected! IP: ");
+    Serial.println(WiFi.localIP());
 }
 
 void reconnectMQTT()
@@ -324,14 +320,11 @@ void setup()
     delay(1000);
 
     dht.begin();
-    connectToWiFi();
+    connectToWiFi();          // blocks until WiFi is configured and connected
+    syncNTPTime();
 
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        syncNTPTime();
-    }
-
-    espClient.setInsecure();
+    // TLS: verify broker certificate against embedded CA cert (DigiCert Global Root G2)
+    espClient.setCACert(EMQX_CA_CERT);
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
     mqttClient.setCallback(onMqttMessage);
     mqttClient.setBufferSize(512);  // config payload can be larger than default 256 B

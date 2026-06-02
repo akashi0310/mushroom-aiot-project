@@ -1,19 +1,31 @@
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.core.auth import decode_token
 from app.core.store import AppStore, store
+
+_bearer = HTTPBearer(auto_error=False)
 
 
 def get_store() -> AppStore:
-    """Inject the global store into route handlers."""
     return store
 
 
-# ─── Auth placeholder (Phase 2) ───────────────────────────────────────────────
-# from fastapi import Depends, HTTPException, status
-# from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-#
-# bearer = HTTPBearer()
-#
-# def require_auth(credentials: HTTPAuthorizationCredentials = Depends(bearer)):
-#     token = credentials.credentials
-#     if not verify_jwt(token):
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-#     return token
+def require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """Dependency: validates Bearer JWT. Returns username or raises 401."""
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    username = decode_token(credentials.credentials)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return username
