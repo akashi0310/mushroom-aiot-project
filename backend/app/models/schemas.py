@@ -3,7 +3,26 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import AIStage, MQTTStatus
+from app.models.enums import ControlMode, HealthStatus, MQTTStatus
+
+
+# ─── Control config ──────────────────────────────────────────────────────────
+
+class ThresholdsPayload(BaseModel):
+    temp_fan_on:     float = Field(30.0, ge=-20, le=80,  description="°C — fan turns ON above this")
+    humidity_fan_on: float = Field(50.0, ge=0,   le=100, description="% — fan turns ON below this")
+    soil_pump_on:    float = Field(25.0, ge=0,   le=100, description="% — pump turns ON below this")
+
+
+class ControlPayload(BaseModel):
+    mode:       ControlMode       = ControlMode.auto
+    thresholds: ThresholdsPayload = Field(default_factory=ThresholdsPayload)
+
+
+class CommandPayload(BaseModel):
+    device:   str            = Field(..., pattern="^(fan|pump)$", description="fan or pump")
+    state:    Optional[bool] = Field(None, description="true=CMD_ON, false=CMD_OFF, null=CMD_NONE (release to mode)")
+    duration: int            = Field(0, ge=0, le=3600, description="seconds before auto-off; 0 = no timer")
 
 
 # ─── Incoming MQTT payloads ───────────────────────────────────────────────────
@@ -24,12 +43,11 @@ class EnvironmentPayload(BaseModel):
 
 class DevicesPayload(BaseModel):
     fan:  bool
-    mist: bool
+    pump: bool
 
 
 class AIPayload(BaseModel):
-    stage:      AIStage
-    confidence: float = Field(..., ge=0, le=1)
+    status: HealthStatus
 
 
 # ─── API responses ────────────────────────────────────────────────────────────

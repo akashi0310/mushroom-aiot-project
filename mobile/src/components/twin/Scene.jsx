@@ -199,11 +199,9 @@ function Pebbles() {
 // ─── chibi mushrooms ──────────────────────────────────────────────────────────
 
 const STAGE_CFG = {
-  pinning:      { cap:'#EEC8F4', stem:'#FAF0FC', baseScale:0.26, count:11, spots:false },
-  growing:      { cap:'#C4ECD0', stem:'#EEF8F0', baseScale:0.58, count:8,  spots:false },
-  mature:       { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7,  spots:true  },
-  overgrown:    { cap:'#E8C882', stem:'#F8EDD4', baseScale:1.30, count:5,  spots:false },
-  contaminated: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
+  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7,  spots:true  },
+  warning:  { cap:'#C4ECD0', stem:'#EEF8F0', baseScale:0.58, count:8,  spots:false },
+  critical: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
 }
 
 function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0, lean=0 }) {
@@ -256,7 +254,7 @@ function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots
 const CLUSTER_DEFS = [{cx:-0.38,cz:0.08},{cx:0.30,cz:-0.20},{cx:-0.55,cz:-0.30},{cx:0.55,cz:0.28}]
 
 function MushroomBed({ stage, tempStress: ts }) {
-  const cfg      = STAGE_CFG[stage] ?? STAGE_CFG.mature
+  const cfg      = STAGE_CFG[stage] ?? STAGE_CFG.healthy
   const capColor = useMemo(() => stressColor(cfg.cap, ts ?? 0), [cfg.cap, ts])
   const lean     = Math.pow(Math.max(0, (ts ?? 0) - 0.3) / 0.7, 1.5) * 0.8
 
@@ -328,39 +326,61 @@ function MiniFan({ active }) {
   )
 }
 
-// ─── mist particles ───────────────────────────────────────────────────────────
+// ─── water pump + drip irrigation ────────────────────────────────────────────
 
-function MistParticles({ active }) {
-  const N = 260
-  const [pos, spd, drift] = useMemo(() => {
-    const p=new Float32Array(N*3), s=new Float32Array(N), d=new Float32Array(N)
+function WaterPump({ active }) {
+  const N = 140
+  const TUBE_Y = HH * 2 - 0.11
+  const [pos, spd, resetX, resetZ] = useMemo(() => {
+    const p=new Float32Array(N*3), s=new Float32Array(N), rx=new Float32Array(N), rz=new Float32Array(N)
     for (let i=0;i<N;i++) {
-      p[i*3]  =(Math.random()-0.5)*(HW*2-0.12)
-      p[i*3+1]=SOIL_H+Math.random()*(HH*2-SOIL_H-0.10)
-      p[i*3+2]=(Math.random()-0.5)*(HD*2-0.12)
-      s[i]=0.06+Math.random()*0.18
-      d[i]=(Math.random()-0.5)*0.04
+      rx[i]=(Math.random()-0.5)*(HW*2-0.18)
+      rz[i]=(Math.random()-0.5)*(HD*2-0.18)
+      p[i*3]=rx[i]; p[i*3+1]=TUBE_Y-Math.random()*(HH*2-SOIL_H-0.15); p[i*3+2]=rz[i]
+      s[i]=0.28+Math.random()*0.45
     }
-    return [p,s,d]
-  },[])
+    return [p,s,rx,rz]
+  },[])  // eslint-disable-line react-hooks/exhaustive-deps
   const attrRef = useRef()
   useFrame((_,dt) => {
     if (!attrRef.current||!active) return
     const a=attrRef.current.array
     for (let i=0;i<N;i++) {
-      a[i*3]  +=dt*d[i]
-      a[i*3+1]+=dt*s[i]
-      if (a[i*3+1]>HH*2-0.08) a[i*3+1]=SOIL_H+0.05
+      a[i*3+1]-=dt*spd[i]
+      if (a[i*3+1]<SOIL_H+0.01) { a[i*3]=resetX[i]; a[i*3+1]=TUBE_Y; a[i*3+2]=resetZ[i] }
     }
     attrRef.current.needsUpdate=true
   })
+  const px=-HW+0.05, pz=-HD+0.05
   return (
-    <points visible={active}>
-      <bufferGeometry>
-        <bufferAttribute ref={attrRef} attach="attributes-position" count={N} array={pos} itemSize={3}/>
-      </bufferGeometry>
-      <pointsMaterial color="#D0E8F8" size={0.016} transparent opacity={0.45} sizeAttenuation depthWrite={false}/>
-    </points>
+    <group>
+      <mesh position={[px,0.045,pz]} castShadow>
+        <boxGeometry args={[0.072,0.090,0.054]}/>
+        <meshStandardMaterial color={active?'#1A5F7A':'#3A5A68'} roughness={0.55} metalness={0.45}/>
+      </mesh>
+      <mesh position={[px,0.096,pz+0.028]}>
+        <sphereGeometry args={[0.008,6,6]}/>
+        <meshStandardMaterial color={active?'#22D3EE':'#1A3040'} emissive={active?'#22D3EE':'#000000'} emissiveIntensity={active?3.5:0}/>
+      </mesh>
+      <mesh position={[px,HH,pz]}>
+        <cylinderGeometry args={[0.006,0.006,HH*2-0.09,6]}/>
+        <meshStandardMaterial color="#2E7D9A" roughness={0.5} metalness={0.35}/>
+      </mesh>
+      <mesh position={[0,TUBE_Y,pz]} rotation={[0,0,Math.PI/2]}>
+        <cylinderGeometry args={[0.006,0.006,HW*2-0.08,8]}/>
+        <meshStandardMaterial color="#2E7D9A" roughness={0.5} metalness={0.35}/>
+      </mesh>
+      <mesh position={[px,TUBE_Y,0]}>
+        <cylinderGeometry args={[0.006,0.006,HD*2-0.08,8]}/>
+        <meshStandardMaterial color="#2E7D9A" roughness={0.5} metalness={0.35}/>
+      </mesh>
+      <points visible={active}>
+        <bufferGeometry>
+          <bufferAttribute ref={attrRef} attach="attributes-position" count={N} array={pos} itemSize={3}/>
+        </bufferGeometry>
+        <pointsMaterial color="#7DD8F8" size={0.013} transparent opacity={0.75} sizeAttenuation depthWrite={false}/>
+      </points>
+    </group>
   )
 }
 
@@ -430,9 +450,9 @@ function SceneContent({ environment, devices, ai }) {
 
   const temp  = environment?.air_temperature ?? 24
   const hum   = environment?.air_humidity    ?? 80
-  const stage = ai?.stage   ?? null
-  const fanOn = devices?.fan  === true
-  const mistOn= devices?.mist === true
+  const stage  = ai?.status  ?? null
+  const fanOn  = devices?.fan  === true
+  const pumpOn = devices?.pump === true
   const ts    = calcTempStress(temp)
 
   useFrame(() => {
@@ -471,7 +491,7 @@ function SceneContent({ environment, devices, ai }) {
       <MushroomBed stage={stage} tempStress={ts} />
       <GrowLight />
       <MiniFan active={fanOn} />
-      <MistParticles active={mistOn} />
+      <WaterPump active={pumpOn} />
       <HeatShimmer stress={ts} />
       <FrostCrystals stress={ts} />
     </>

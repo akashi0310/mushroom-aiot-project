@@ -79,14 +79,14 @@ export function DevicesPage() {
             state={data?.fan}
             activeColorHex="#D97706"
             activeColorRgb="217,119,6"
-            description="Triggers when temp > 29°C or humidity > 93%"
+            description="Triggers when temp > 30°C or humidity < 50%"
           />
           <RelayCard
-            name="mist_system"
-            state={data?.mist}
+            name="water_pump"
+            state={data?.pump}
             activeColorHex="#0891B2"
             activeColorRgb="8,145,178"
-            description="Triggers when humidity < 80%"
+            description="Triggers when soil moisture < 25% (dry soil)"
           />
         </div>
 
@@ -105,7 +105,7 @@ export function DevicesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #EAEDEA', background: '#FAFBFC' }}>
-                {['timestamp', 'fan', 'mist'].map((h, i) => (
+                {['timestamp', 'fan', 'pump'].map((h, i) => (
                   <th key={h} style={{
                     padding: '8px 16px',
                     fontFamily: "'JetBrains Mono',monospace",
@@ -141,10 +141,10 @@ export function DevicesPage() {
                     <span style={{
                       fontFamily: "'JetBrains Mono',monospace",
                       fontSize: 10, fontWeight: 600,
-                      color: r.mist ? '#0891B2' : '#D0D8D0',
+                      color: r.pump ? '#0891B2' : '#D0D8D0',
                       letterSpacing: '0.08em',
                     }}>
-                      {r.mist ? '● ON' : '○ off'}
+                      {r.pump ? '● ON' : '○ off'}
                     </span>
                   </td>
                 </tr>

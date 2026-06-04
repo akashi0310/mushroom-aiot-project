@@ -1,9 +1,12 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/useAuthStore'
 
 const NAV = [
   { to: '/',            label: 'Dashboard',   icon: '⬡' },
   { to: '/environment', label: 'Environment', icon: '◈' },
   { to: '/devices',     label: 'Devices',     icon: '◉' },
+  { to: '/ai',          label: 'AI Health',   icon: '◆' },
+  { to: '/control',     label: 'Control',     icon: '⊡' },
   { to: '/twin',        label: '3D Twin',     icon: '◳' },
 ]
 
@@ -53,6 +56,15 @@ const S = {
 }
 
 export function Sidebar() {
+  const logout   = useAuthStore((s) => s.logout)
+  const username = useAuthStore((s) => s.username)
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <aside style={S.aside}>
       <div style={S.logoWrap}>
@@ -96,8 +108,22 @@ export function Sidebar() {
       </nav>
 
       <div style={S.footer}>
-        <span style={{ color: '#16A34A', fontSize: 8 }}>●</span>
-        rack-1 · node_01
+        <div style={{ flex: 1 }}>
+          <span style={{ color: '#16A34A', fontSize: 8 }}>● </span>
+          {username ?? 'admin'} · rack-1
+        </div>
+        <button
+          onClick={handleLogout}
+          style={{
+            fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 9, color: '#9BB09B',
+            background: 'none', border: 'none',
+            cursor: 'pointer', letterSpacing: '0.06em',
+            padding: 0,
+          }}
+        >
+          logout
+        </button>
       </div>
     </aside>
   )

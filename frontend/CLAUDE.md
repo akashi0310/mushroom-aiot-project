@@ -66,7 +66,7 @@ React pages/components
 | `../backend/app/services/mqtt.py` | MQTT client thread |
 | `../backend/app/services/broadcaster.py` | Socket.IO server + emit |
 | `../backend/app/models/schemas.py` | Pydantic models for all three topics |
-| `../backend/app/models/enums.py` | `AIStage` enum, `MQTTStatus` enum |
+| `../backend/app/models/enums.py` | `HealthStatus` enum, `MQTTStatus` enum |
 
 ## Environment Variables
 
@@ -109,7 +109,7 @@ Connect to `http://localhost:8000` (Socket.IO path).
     "soil_moisture": 62.0
   },
   "devices": { "fan": true, "mist": false },
-  "ai": { "stage": "growing", "confidence": 0.92 },
+  "ai": { "status": "healthy" },
   "last_updated": "2026-05-21T10:00:00Z",
   "mqtt_status": "connected"
 }
@@ -133,10 +133,10 @@ Topic pattern: `{MQTT_TOPIC_PREFIX}/rack-1/{category}`
 { "fan": true, "mist": false }
 
 // mushroom-farm/rack-1/ai
-{ "stage": "growing", "confidence": 0.92 }
+{ "status": "healthy" }
 ```
 
-Valid `AIStage` values: `pinning`, `growing`, `mature`, `overgrown`, `contaminated`
+Valid `status` values: `healthy`, `warning`, `critical`
 
 ## UI Design Tokens
 

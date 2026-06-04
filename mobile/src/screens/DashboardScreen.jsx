@@ -63,35 +63,14 @@ export function DashboardScreen() {
           <MetricCard label="cooling fan" value={devices ? (devices.fan ? 'ON' : 'OFF') : null}
             color={devices?.fan ? '#D97706' : '#9BB09B'} note={devices?.fan ? 'relay: active' : 'relay: idle'} />
           <View style={styles.gap} />
-          <MetricCard label="mist system" value={devices ? (devices.mist ? 'ON' : 'OFF') : null}
-            color={devices?.mist ? '#0891B2' : '#9BB09B'} note={devices?.mist ? 'relay: active' : 'relay: idle'} />
+          <MetricCard label="water pump" value={devices ? (devices.pump ? 'ON' : 'OFF') : null}
+            color={devices?.pump ? '#0891B2' : '#9BB09B'} note={devices?.pump ? 'relay: active' : 'relay: idle'} />
         </View>
 
         <Text style={styles.sectionLabel}>// ai_classification</Text>
         <View style={styles.aiCard}>
-          <View style={styles.aiRow}>
-            <View>
-              <Text style={styles.aiSubLabel}>growth_stage</Text>
-              <StageBadge stage={ai?.stage} />
-            </View>
-            {ai?.confidence != null && (
-              <View>
-                <Text style={styles.aiSubLabel}>confidence</Text>
-                <Text style={styles.aiConfValue}>
-                  {(ai.confidence * 100).toFixed(0)}
-                  <Text style={styles.aiConfUnit}>%</Text>
-                </Text>
-              </View>
-            )}
-          </View>
-          {ai?.confidence != null && (
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, {
-                width: `${(ai.confidence * 100).toFixed(0)}%`,
-                backgroundColor: ai.confidence > 0.9 ? '#16A34A' : ai.confidence > 0.75 ? '#D97706' : '#DC2626',
-              }]} />
-            </View>
-          )}
+          <Text style={styles.aiSubLabel}>health_status</Text>
+          <StageBadge status={ai?.status} />
         </View>
 
       </ScrollView>

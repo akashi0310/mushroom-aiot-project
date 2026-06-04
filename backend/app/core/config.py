@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     server_port: int = 8000
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
+    # Auth (JWT)
+    auth_secret_key: str = "change-this-secret-key-in-production"
+    auth_algorithm: str = "HS256"
+    auth_token_expire_hours: int = 24
+    auth_username: str = "admin"
+    auth_password_hash: str = ""  # bcrypt hash; if empty, plain auth_password is used
+    auth_password: str = "mushroom2024"  # used only if auth_password_hash is empty
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
@@ -32,6 +40,14 @@ class Settings(BaseSettings):
     @property
     def topic_ai(self) -> str:
         return f"{self.mqtt_topic_prefix}/rack-1/ai"
+
+    @property
+    def topic_config(self) -> str:
+        return f"{self.mqtt_topic_prefix}/rack-1/config"
+
+    @property
+    def topic_command(self) -> str:
+        return f"{self.mqtt_topic_prefix}/rack-1/command"
 
     @property
     def topic_wildcard(self) -> str:

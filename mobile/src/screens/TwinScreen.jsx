@@ -7,16 +7,15 @@ import { StageBadge } from '../components/StageBadge'
 import { ConnectionBadge } from '../components/ConnectionBadge'
 import { useGreenhouseSnapshot } from '../hooks/useSocket'
 
-const STAGES = ['pinning', 'growing', 'mature', 'overgrown', 'contaminated']
+const HEALTH_STATUSES = ['healthy', 'warning', 'critical']
 
 const DEFAULT_SIM = {
   air_temperature: 24,
   air_humidity:    80,
   soil_moisture:   60,
-  stage:           'growing',
-  confidence:      0.92,
+  status:          'healthy',
   fan:             false,
-  mist:            true,
+  pump:            true,
 }
 
 // ─── sim panel ────────────────────────────────────────────────────────────────
@@ -59,18 +58,18 @@ function SimPanel({ sim, onChange }) {
           <SimSlider label="soil_moisture" value={sim.soil_moisture} min={0} max={100} step={1} unit="%"
             onChange={(v) => onChange('soil_moisture', v)} />
           <View style={ss.divider} />
-          <Text style={ss.subLabel}>ai_stage</Text>
+          <Text style={ss.subLabel}>health_status</Text>
           <View style={ss.stageRow}>
-            {STAGES.map((s) => (
-              <TouchableOpacity key={s} onPress={() => onChange('stage', s)}
-                style={[ss.stageBtn, sim.stage === s && ss.stageBtnActive]}>
-                <Text style={[ss.stageBtnText, sim.stage === s && ss.stageBtnTextActive]}>{s}</Text>
+            {HEALTH_STATUSES.map((s) => (
+              <TouchableOpacity key={s} onPress={() => onChange('status', s)}
+                style={[ss.stageBtn, sim.status === s && ss.stageBtnActive]}>
+                <Text style={[ss.stageBtnText, sim.status === s && ss.stageBtnTextActive]}>{s}</Text>
               </TouchableOpacity>
             ))}
           </View>
           <View style={ss.divider} />
           <View style={ss.toggleRow}>
-            {[['fan', '#D97706'], ['mist', '#0891B2']].map(([key, color]) => (
+            {[['fan', '#D97706'], ['pump', '#0891B2']].map(([key, color]) => (
               <TouchableOpacity key={key} onPress={() => onChange(key, !sim[key])}
                 style={[ss.toggleBtn, sim[key] && { borderColor: color, backgroundColor: color + '18' }]}>
                 <Text style={[ss.toggleBtnText, sim[key] && { color }]}>
@@ -99,8 +98,8 @@ function DataRow({ label, value, color }) {
 function DataPanel({ envData, devData, aiData, simMode }) {
   const temp  = envData?.air_temperature
   const hum   = envData?.air_humidity
-  const fanOn = devData?.fan  === true
-  const mistOn= devData?.mist === true
+  const fanOn  = devData?.fan  === true
+  const pumpOn = devData?.pump === true
 
   const tempColor = temp == null ? '#9BB09B' : temp > 30 ? '#DC2626' : temp < 22 ? '#0891B2' : '#16A34A'
   const humColor  = hum  == null ? '#9BB09B' : hum < 70 ? '#D97706' : hum > 93 ? '#0891B2' : '#16A34A'
@@ -117,7 +116,7 @@ function DataPanel({ envData, devData, aiData, simMode }) {
         />
       )}
       <View style={dp.divider} />
-      {[['cooling fan', fanOn, '#D97706'], ['mist system', mistOn, '#0891B2']].map(([label, on, color]) => (
+      {[['cooling fan', fanOn, '#D97706'], ['water pump', pumpOn, '#0891B2']].map(([label, on, color]) => (
         <View key={label} style={dp.row}>
           <Text style={dp.label}>{label}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -128,21 +127,13 @@ function DataPanel({ envData, devData, aiData, simMode }) {
           </View>
         </View>
       ))}
-      {aiData?.stage && (
+      {aiData?.status && (
         <>
           <View style={dp.divider} />
           <View style={[dp.row, { alignItems: 'center' }]}>
-            <Text style={dp.label}>growth stage</Text>
-            <StageBadge stage={aiData.stage} />
+            <Text style={dp.label}>health_status</Text>
+            <StageBadge status={aiData.status} />
           </View>
-          {aiData.confidence != null && (
-            <View style={dp.progressBg}>
-              <View style={[dp.progressFill, {
-                width: `${(aiData.confidence * 100).toFixed(0)}%`,
-                backgroundColor: aiData.confidence > 0.9 ? '#16A34A' : aiData.confidence > 0.75 ? '#D97706' : '#DC2626',
-              }]} />
-            </View>
-          )}
         </>
       )}
     </View>
@@ -161,8 +152,8 @@ export function TwinScreen() {
   }
 
   const envData = simMode ? sim                                             : environment
-  const devData = simMode ? { fan: sim.fan, mist: sim.mist }               : devices
-  const aiData  = simMode ? { stage: sim.stage, confidence: sim.confidence }: ai
+  const devData = simMode ? { fan: sim.fan, pump: sim.pump }  : devices
+  const aiData  = simMode ? { status: sim.status }           : ai
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

@@ -10,9 +10,10 @@ import paho.mqtt.client as mqtt
 from app.core.config import settings
 from app.core.store import store
 from app.models.enums import MQTTStatus
-from app.models.schemas import AIPayload, DevicesPayload, EnvironmentPayload
+from app.models.schemas import AIPayload, CommandPayload, ControlPayload, DevicesPayload, EnvironmentPayload
 
 _loop: asyncio.AbstractEventLoop | None = None
+_client: mqtt.Client | None = None
 
 
 def set_event_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -27,6 +28,26 @@ def _push_state() -> None:
         asyncio.run_coroutine_threadsafe(broadcast_state(), _loop)
 
 
+def publish_command(payload: CommandPayload) -> bool:
+    """Publish a one-shot device command (ephemeral, no retain).
+    state=None is excluded from JSON so firmware receives CMD_NONE (release to mode).
+    """
+    if _client is None or not _client.is_connected():
+        return False
+    raw = json.dumps(payload.model_dump(mode="json", exclude_none=True))
+    result = _client.publish(settings.topic_command, raw, qos=1, retain=False)
+    return result.rc == mqtt.MQTT_ERR_SUCCESS
+
+
+def publish_control(payload: ControlPayload) -> bool:
+    """Publish control config to firmware. Returns True if sent successfully."""
+    if _client is None or not _client.is_connected():
+        return False
+    raw = json.dumps(payload.model_dump(mode="json"))
+    result = _client.publish(settings.topic_config, raw, qos=1, retain=True)
+    return result.rc == mqtt.MQTT_ERR_SUCCESS
+
+
 # ─── paho callbacks ───────────────────────────────────────────────────────────
 
 def _on_connect(client, userdata, flags, rc, properties=None):
@@ -34,6 +55,9 @@ def _on_connect(client, userdata, flags, rc, properties=None):
         store.set_mqtt_status(MQTTStatus.connected)
         client.subscribe(settings.topic_wildcard)
         print(f"[MQTT] Connected → subscribed to {settings.topic_wildcard}")
+
+        # Re-publish retained config so firmware picks it up after reconnect
+        publish_control(store.control)
     else:
         store.set_mqtt_status(MQTTStatus.error)
         print(f"[MQTT] Connection failed rc={rc}")
@@ -65,12 +89,15 @@ def _on_message(client, userdata, msg):
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
             store.update_devices(payload, ts)
-            print(f"[DEV]  fan={payload.fan}  mist={payload.mist}")
+            print(f"[DEV]  fan={payload.fan}  pump={payload.pump}")
 
         elif topic == settings.topic_ai:
             payload = AIPayload(**data)
             store.update_ai(payload, ts)
-            print(f"[AI]   stage={payload.stage}  conf={payload.confidence}")
+            print(f"[AI]   status={payload.status}")
+
+        else:
+            return  # ignore config echo and other topics
 
     except Exception as exc:
         print(f"[MQTT] Validation error on {topic}: {exc}")
@@ -82,24 +109,25 @@ def _on_message(client, userdata, msg):
 # ─── Thread entry point ───────────────────────────────────────────────────────
 
 def _run_mqtt():
-    client = mqtt.Client(
+    global _client
+    _client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
         client_id=f"mushroom-backend-{int(time.time())}",
     )
-    client.on_connect    = _on_connect
-    client.on_disconnect = _on_disconnect
-    client.on_message    = _on_message
+    _client.on_connect    = _on_connect
+    _client.on_disconnect = _on_disconnect
+    _client.on_message    = _on_message
 
     if settings.mqtt_username:
-        client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
+        _client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
 
     if settings.mqtt_port == 8883:
         ca = settings.mqtt_ca_cert or None
-        client.tls_set(ca_certs=ca, cert_reqs=ssl.CERT_REQUIRED)
+        _client.tls_set(ca_certs=ca, cert_reqs=ssl.CERT_REQUIRED)
 
     print(f"[MQTT] Connecting to {settings.mqtt_broker}:{settings.mqtt_port} ...")
-    client.connect(settings.mqtt_broker, settings.mqtt_port, keepalive=60)
-    client.loop_forever()
+    _client.connect(settings.mqtt_broker, settings.mqtt_port, keepalive=60)
+    _client.loop_forever()
 
 
 def start_mqtt_thread() -> threading.Thread:
