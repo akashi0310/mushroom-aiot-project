@@ -21,9 +21,6 @@ class Settings(BaseSettings):
     auth_secret_key: str = "change-this-secret-key-in-production"
     auth_algorithm: str = "HS256"
     auth_token_expire_hours: int = 24
-    auth_username: str = "admin"
-    auth_password_hash: str = ""  # bcrypt hash; if empty, plain auth_password is used
-    auth_password: str = "mushroom2024"  # used only if auth_password_hash is empty
 
     # Supabase
     supabase_url: str = ""

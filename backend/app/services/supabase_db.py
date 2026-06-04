@@ -1,52 +1,86 @@
 """
-Supabase persistent storage service.
+Supabase persistent storage — calls PostgREST REST API directly via httpx.
 
-Tables required (run SQL in Supabase dashboard):
-    See docs/supabase_setup.sql
+Why not the supabase-py SDK?
+  The SDK pulls in `realtime` which requires websockets<16, conflicting with
+  python-socketio's websockets==16.0.  We only need simple INSERT/SELECT so
+  the raw REST API is cleaner and has zero extra deps.
 
-Strategy:
-- Latest state stays in AppStore (in-memory) for fast Socket.IO broadcasting
-- Every MQTT message is also written here (fire-and-forget)
-- History API routes query this instead of in-memory deques
+Tables required (run docs/supabase_setup.sql in Supabase SQL Editor once).
 """
 from __future__ import annotations
 
-from supabase import AsyncClient, acreate_client
+import httpx
 
-_client: AsyncClient | None = None
-
-
-async def init(url: str, key: str) -> None:
-    global _client
-    _client = await acreate_client(url, key)
-    print("[Supabase] Connected")
+_url: str = ""
+_key: str = ""
 
 
-def _db() -> AsyncClient:
-    if _client is None:
-        raise RuntimeError("Supabase client not initialised — call init() first")
-    return _client
+def init(url: str, key: str) -> None:
+    global _url, _key
+    _url = url.rstrip("/")
+    _key = key
+    print("[Supabase] Configured")
 
 
-# ─── Writes (fire-and-forget from MQTT thread) ────────────────────────────────
+def _headers(prefer_minimal: bool = True) -> dict:
+    h = {
+        "apikey":        _key,
+        "Authorization": f"Bearer {_key}",
+        "Content-Type":  "application/json",
+    }
+    if prefer_minimal:
+        h["Prefer"] = "return=minimal"
+    return h
+
+
+def _ready() -> bool:
+    return bool(_url and _key)
+
+
+# ─── Writes (called via asyncio.run_coroutine_threadsafe) ─────────────────────
 
 async def insert_environment(data: dict) -> None:
+    if not _ready():
+        return
     try:
-        await _db().table("environment_readings").insert(data).execute()
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(
+                f"{_url}/rest/v1/environment_readings",
+                json=data,
+                headers=_headers(),
+            )
+            r.raise_for_status()
     except Exception as exc:
         print(f"[Supabase] insert_environment error: {exc}")
 
 
 async def insert_devices(data: dict) -> None:
+    if not _ready():
+        return
     try:
-        await _db().table("device_states").insert(data).execute()
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(
+                f"{_url}/rest/v1/device_states",
+                json=data,
+                headers=_headers(),
+            )
+            r.raise_for_status()
     except Exception as exc:
         print(f"[Supabase] insert_devices error: {exc}")
 
 
 async def insert_ai(data: dict) -> None:
+    if not _ready():
+        return
     try:
-        await _db().table("ai_readings").insert(data).execute()
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(
+                f"{_url}/rest/v1/ai_readings",
+                json=data,
+                headers=_headers(),
+            )
+            r.raise_for_status()
     except Exception as exc:
         print(f"[Supabase] insert_ai error: {exc}")
 
@@ -54,48 +88,86 @@ async def insert_ai(data: dict) -> None:
 # ─── Reads (called from async API routes) ────────────────────────────────────
 
 async def get_environment_history(limit: int = 100) -> list[dict]:
+    if not _ready():
+        return []
     try:
-        res = (
-            await _db()
-            .table("environment_readings")
-            .select("timestamp,air_temperature,air_humidity,soil_moisture")
-            .order("timestamp", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return list(reversed(res.data))
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_url}/rest/v1/environment_readings",
+                params={
+                    "select":    "timestamp,air_temperature,air_humidity,soil_moisture",
+                    "order":     "timestamp.desc",
+                    "limit":     str(limit),
+                },
+                headers=_headers(prefer_minimal=False),
+            )
+            r.raise_for_status()
+            return list(reversed(r.json()))
     except Exception as exc:
         print(f"[Supabase] get_environment_history error: {exc}")
         return []
 
 
 async def get_devices_history(limit: int = 100) -> list[dict]:
+    if not _ready():
+        return []
     try:
-        res = (
-            await _db()
-            .table("device_states")
-            .select("timestamp,fan,pump")
-            .order("timestamp", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return list(reversed(res.data))
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_url}/rest/v1/device_states",
+                params={
+                    "select": "timestamp,fan,pump",
+                    "order":  "timestamp.desc",
+                    "limit":  str(limit),
+                },
+                headers=_headers(prefer_minimal=False),
+            )
+            r.raise_for_status()
+            return list(reversed(r.json()))
     except Exception as exc:
         print(f"[Supabase] get_devices_history error: {exc}")
         return []
 
 
-async def get_ai_history(limit: int = 100) -> list[dict]:
+async def get_user_by_username(username: str) -> dict | None:
+    """Return {username, password_hash} or None if not found."""
+    if not _ready():
+        return None
     try:
-        res = (
-            await _db()
-            .table("ai_readings")
-            .select("timestamp,status")
-            .order("timestamp", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        return list(reversed(res.data))
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"{_url}/rest/v1/users",
+                params={
+                    "select":   "username,password_hash",
+                    "username": f"eq.{username}",
+                    "limit":    "1",
+                },
+                headers=_headers(prefer_minimal=False),
+            )
+            r.raise_for_status()
+            data = r.json()
+            return data[0] if data else None
+    except Exception as exc:
+        print(f"[Supabase] get_user_by_username error: {exc}")
+        return None
+
+
+async def get_ai_history(limit: int = 100) -> list[dict]:
+    if not _ready():
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_url}/rest/v1/ai_readings",
+                params={
+                    "select": "timestamp,status",
+                    "order":  "timestamp.desc",
+                    "limit":  str(limit),
+                },
+                headers=_headers(prefer_minimal=False),
+            )
+            r.raise_for_status()
+            return list(reversed(r.json()))
     except Exception as exc:
         print(f"[Supabase] get_ai_history error: {exc}")
         return []

@@ -39,6 +39,22 @@ CREATE TABLE IF NOT EXISTS ai_readings (
 CREATE INDEX IF NOT EXISTS idx_ai_timestamp
     ON ai_readings (timestamp DESC);
 
+-- 4. Users (auth)
+CREATE TABLE IF NOT EXISTS users (
+    id            BIGSERIAL PRIMARY KEY,
+    username      VARCHAR(50) UNIQUE NOT NULL,
+    password_hash TEXT        NOT NULL,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+
+-- Seed default admin (password: mushroom2024)
+-- Regenerate hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'<password>', bcrypt.gensalt(12)).decode())"
+INSERT INTO users (username, password_hash) VALUES
+  ('admin', '$2b$12$Cu6926U4o0vGjoBozKusTuYrA/pxcAqPP5tgUmTyqlXDEMAefw9D.')
+ON CONFLICT (username) DO NOTHING;
+
 -- ============================================================
 -- Security: Row Level Security
 -- Backend dùng service_role key (trong .env) → bypass RLS và ghi được
@@ -48,11 +64,13 @@ CREATE INDEX IF NOT EXISTS idx_ai_timestamp
 ALTER TABLE environment_readings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_states         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_readings            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users                  ENABLE ROW LEVEL SECURITY;
 
 -- Chặn tất cả truy cập từ anon/authenticated role (chỉ service_role được phép)
 CREATE POLICY "deny_all_environment" ON environment_readings USING (false);
 CREATE POLICY "deny_all_devices"     ON device_states         USING (false);
 CREATE POLICY "deny_all_ai"          ON ai_readings            USING (false);
+CREATE POLICY "deny_all_users"       ON users                  USING (false);
 
 -- QUAN TRỌNG: Đổi SUPABASE_KEY trong .env sang service_role key
 -- (Supabase Dashboard → Project Settings → API → service_role secret)

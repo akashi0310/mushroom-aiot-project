@@ -1,30 +1,28 @@
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ─── Password ────────────────────────────────────────────────────────────────
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def hash_password(plain: str) -> str:
-    return _pwd_ctx.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
-def authenticate_user(username: str, password: str) -> bool:
-    if username != settings.auth_username:
+async def authenticate_user(username: str, password: str) -> bool:
+    """Verify credentials against users table in Supabase."""
+    from app.services.supabase_db import get_user_by_username
+    user = await get_user_by_username(username)
+    if not user:
         return False
-    if settings.auth_password_hash:
-        return verify_password(password, settings.auth_password_hash)
-    # Fallback: plain-text comparison (dev mode only; set auth_password_hash in prod)
-    return password == settings.auth_password
+    return verify_password(password, user["password_hash"])
 
 
 # ─── JWT ─────────────────────────────────────────────────────────────────────
