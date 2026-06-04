@@ -100,7 +100,7 @@ function TerrariumGlass() {
 
 // ─── terrain ─────────────────────────────────────────────────────────────────
 
-function Terrain() {
+function Terrain({ soilMoisture = 60 }) {
   const sW = HW*2 - 0.01
   const sD = HD*2 - 0.01
   const geo = useMemo(() => {
@@ -112,14 +112,19 @@ function Terrain() {
     return g
   }, [sW, sD])
 
+  // dry (0%) → light tan #7A5030, moist (100%) → dark brown #2C180A
+  const t      = Math.max(0, Math.min(1, soilMoisture / 100))
+  const surfColor = useMemo(() => '#' + new THREE.Color('#7A5030').lerp(new THREE.Color('#3C2214'), t).getHexString(), [t])
+  const baseColor = useMemo(() => '#' + new THREE.Color('#5A3820').lerp(new THREE.Color('#2C180A'), t).getHexString(), [t])
+
   return (
     <>
       <mesh geometry={geo} receiveShadow>
-        <meshStandardMaterial color="#3C2214" roughness={0.96} />
+        <meshStandardMaterial color={surfColor} roughness={0.96} />
       </mesh>
       <mesh position={[0, SOIL_H*0.5, 0]}>
         <boxGeometry args={[sW, SOIL_H, sD]} />
-        <meshStandardMaterial color="#2C180A" roughness={0.98} />
+        <meshStandardMaterial color={baseColor} roughness={0.98} />
       </mesh>
     </>
   )
@@ -201,9 +206,9 @@ function Pebbles() {
 // ─── chibi mushrooms ──────────────────────────────────────────────────────────
 
 const STAGE_CFG = {
-  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7,  spots:true  },
-  warning:  { cap:'#C4ECD0', stem:'#EEF8F0', baseScale:0.58, count:8,  spots:false },
-  critical: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.72, count:7,  spots:false },
+  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7, spots:true  },
+  warning:  { cap:'#D4C070', stem:'#EEE8C8', baseScale:0.72, count:7, spots:false }, // yellowish — stunted, early stress
+  critical: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.50, count:6, spots:false }, // olive-brown — small, diseased
 }
 
 function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0, lean=0 }) {
@@ -504,6 +509,7 @@ function SceneContent({ environment, devices, ai }) {
 
   const temp   = environment?.air_temperature ?? 24
   const hum    = environment?.air_humidity    ?? 80
+  const soil   = environment?.soil_moisture   ?? 60
   const stage  = ai?.status  ?? null
   const fanOn  = devices?.fan  === true
   const pumpOn = devices?.pump === true
@@ -549,7 +555,7 @@ function SceneContent({ environment, devices, ai }) {
 
       <TerrariumBase />
       <TerrariumGlass />
-      <Terrain />
+      <Terrain soilMoisture={soil} />
       <MossPatches />
       <GrassTufts />
       <Pebbles />
