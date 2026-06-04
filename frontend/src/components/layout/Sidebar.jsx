@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { api } from '../../services/api'
 import { useAuthStore } from '../../store/useAuthStore'
 
 const NAV = [
@@ -55,10 +57,114 @@ const S = {
   },
 }
 
+const MONO = "'JetBrains Mono',monospace"
+
+function ChangePasswordModal({ onClose }) {
+  const [cur,    setCur]    = useState('')
+  const [next,   setNext]   = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [err,    setErr]    = useState('')
+  const [ok,     setOk]     = useState(false)
+  const [busy,   setBusy]   = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErr('')
+    if (next.length < 8)         return setErr('New password must be at least 8 characters')
+    if (next !== confirm)        return setErr('Passwords do not match')
+    setBusy(true)
+    const res = await api.changePassword(cur, next)
+    setBusy(false)
+    if (res.ok) { setOk(true); setTimeout(onClose, 1200) }
+    else        setErr(res.error)
+  }
+
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box',
+    padding: '8px 10px',
+    fontFamily: MONO, fontSize: 12,
+    border: '1.5px solid #EAEDEA', borderRadius: 6,
+    background: '#FAFBFC', color: '#1A261A', outline: 'none',
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.25)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 10,
+        padding: '28px 24px', width: 300,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+      }}>
+        <p style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: '#1A261A', margin: '0 0 20px' }}>
+          change_password
+        </p>
+
+        {ok ? (
+          <p style={{ fontFamily: MONO, fontSize: 11, color: '#16A34A', textAlign: 'center' }}>
+            ✓ Password updated
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            {[
+              { label: 'current', value: cur,     set: setCur     },
+              { label: 'new',     value: next,    set: setNext    },
+              { label: 'confirm', value: confirm, set: setConfirm },
+            ].map(({ label, value, set }) => (
+              <div key={label} style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, color: '#9BB09B', letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: 4 }}>
+                  {label}
+                </label>
+                <input
+                  type="password"
+                  value={value}
+                  onChange={e => set(e.target.value)}
+                  required
+                  style={inputStyle}
+                />
+              </div>
+            ))}
+
+            {err && (
+              <p style={{ fontFamily: MONO, fontSize: 10, color: '#DC2626', margin: '0 0 12px', padding: '6px 10px', background: 'rgba(220,38,38,0.06)', borderRadius: 4 }}>
+                ✕ {err}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <button type="button" onClick={onClose} style={{
+                flex: 1, padding: '8px 0',
+                fontFamily: MONO, fontSize: 10, fontWeight: 600,
+                background: 'none', border: '1.5px solid #EAEDEA',
+                borderRadius: 6, color: '#9BB09B', cursor: 'pointer',
+              }}>
+                cancel
+              </button>
+              <button type="submit" disabled={busy} style={{
+                flex: 1, padding: '8px 0',
+                fontFamily: MONO, fontSize: 10, fontWeight: 700,
+                background: busy ? '#C0D0C0' : '#16A34A',
+                border: 'none', borderRadius: 6,
+                color: '#fff', cursor: busy ? 'not-allowed' : 'pointer',
+              }}>
+                {busy ? 'saving...' : 'save'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function Sidebar() {
   const logout   = useAuthStore((s) => s.logout)
   const username = useAuthStore((s) => s.username)
   const navigate = useNavigate()
+  const [showPwd, setShowPwd] = useState(false)
 
   function handleLogout() {
     logout()
@@ -113,9 +219,21 @@ export function Sidebar() {
           {username ?? 'admin'} · rack-1
         </div>
         <button
+          onClick={() => setShowPwd(true)}
+          style={{
+            fontFamily: MONO,
+            fontSize: 9, color: '#9BB09B',
+            background: 'none', border: 'none',
+            cursor: 'pointer', letterSpacing: '0.06em',
+            padding: '0 6px 0 0',
+          }}
+        >
+          passwd
+        </button>
+        <button
           onClick={handleLogout}
           style={{
-            fontFamily: "'JetBrains Mono',monospace",
+            fontFamily: MONO,
             fontSize: 9, color: '#9BB09B',
             background: 'none', border: 'none',
             cursor: 'pointer', letterSpacing: '0.06em',
@@ -125,6 +243,8 @@ export function Sidebar() {
           logout
         </button>
       </div>
+
+      {showPwd && <ChangePasswordModal onClose={() => setShowPwd(false)} />}
     </aside>
   )
 }
