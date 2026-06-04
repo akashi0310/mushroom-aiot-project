@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
 
--- Seed default admin (password: mushroom2024)
--- Regenerate hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'<password>', bcrypt.gensalt(12)).decode())"
+-- Seed default admin — CHANGE PASSWORD IMMEDIATELY after first login!
+-- Generate your own hash: python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt(12)).decode())"
 INSERT INTO users (username, password_hash) VALUES
   ('admin', '$2b$12$Cu6926U4o0vGjoBozKusTuYrA/pxcAqPP5tgUmTyqlXDEMAefw9D.')
 ON CONFLICT (username) DO NOTHING;

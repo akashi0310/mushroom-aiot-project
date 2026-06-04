@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     auth_algorithm: str = "HS256"
     auth_token_expire_hours: int = 24
 
-    # Supabase
+    # Supabase — must use service_role key (not anon key) to bypass RLS
     supabase_url: str = ""
-    supabase_key: str = ""  # anon/public key
+    supabase_key: str = ""
 
     # Telegram notifications
     telegram_bot_token: str = ""

@@ -1,15 +1,26 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.api.deps import require_auth
-from app.core.auth import authenticate_user, create_access_token
+from app.core.auth import DBUnavailableError, authenticate_user, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{1,50}$")
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, v: str) -> str:
+        if not _USERNAME_RE.match(v):
+            raise ValueError("Invalid username format")
+        return v
 
 
 class TokenResponse(BaseModel):
@@ -23,7 +34,14 @@ class UserResponse(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest):
-    if not await authenticate_user(body.username, body.password):
+    try:
+        ok = await authenticate_user(body.username, body.password)
+    except DBUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service unavailable — try again later",
+        )
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

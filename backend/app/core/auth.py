@@ -16,10 +16,20 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
+class DBUnavailableError(Exception):
+    """Raised when Supabase is unreachable — caller should return 503."""
+
+
 async def authenticate_user(username: str, password: str) -> bool:
-    """Verify credentials against users table in Supabase."""
-    from app.services.supabase_db import get_user_by_username
-    user = await get_user_by_username(username)
+    """Verify credentials against users table in Supabase.
+
+    Raises DBUnavailableError if Supabase cannot be reached,
+    so callers can distinguish infrastructure failure from bad credentials.
+    """
+    from app.services import supabase_db
+    user = await supabase_db.get_user_by_username(username)
+    if user is None and not supabase_db._ready():
+        raise DBUnavailableError("Supabase not configured")
     if not user:
         return False
     return verify_password(password, user["password_hash"])
