@@ -50,19 +50,7 @@ unsigned long pumpAutoOffAt = 0;   // millis() target; 0 = no timer
 
 ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
 {
-    // ── Layer 0: Safety floor (HIGHEST priority, cannot be overridden) ────────
-    // Protects plants regardless of mode, command, or network state.
-    bool safetyPump = soil < SAFETY_SOIL_MIN;
-    bool safetyFan  = temp > SAFETY_TEMP_MAX;
-    if (safetyPump || safetyFan) {
-        Serial.printf("[SAFETY] Floor triggered — soil=%.1f%% temp=%.1f°C\n", soil, temp);
-        if (safetyPump && safetyFan) return ACTUATOR_PUMP_AND_FAN;
-        if (safetyPump)              return ACTUATOR_PUMP;
-        return ACTUATOR_FAN;
-    }
-
-    // ── Layer 2: Mode logic ──────────────────────────────────────────────────
-    // Watchdog: revert to AUTO if backend hasn't sent config for too long
+    // ── STEP 1: CALCULATE THE BASE MODE LOGIC (AUTO / MANUAL / OFF) ──
     bool watchdog = (lastConfigMs > 0) &&
                     (millis() - lastConfigMs > CONFIG_WATCHDOG_MS) &&
                     (currentMode != MODE_AUTO);
@@ -70,7 +58,9 @@ ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
         Serial.println("[WDG] Config timeout — fallback to AUTO classify.");
     }
 
-    bool basePump = false, baseFan = false;
+    bool basePump = false;
+    bool baseFan  = false;
+
     if (watchdog || currentMode == MODE_AUTO) {
         ActuatorAction a = classifyActuator(temp, hum, soil);
         basePump = (a == ACTUATOR_PUMP) || (a == ACTUATOR_PUMP_AND_FAN);
@@ -79,15 +69,27 @@ ActuatorAction resolveActuatorAction(float temp, float hum, float soil)
         basePump = soil < thresholds.soil_pump_on;
         baseFan  = (temp > thresholds.temp_fan_on) || (hum < thresholds.humidity_fan_on);
     }
-    // MODE_OFF → base stays false
 
-    // ── Layer 1: Command override (wins over mode) ────────────────────────────
-    bool pump = (cmdPump == CMD_NONE) ? basePump : (cmdPump == CMD_ON);
-    bool fan  = (cmdFan  == CMD_NONE) ? baseFan  : (cmdFan  == CMD_ON);
+    // ── STEP 2: APPLY FRONTEND COMMAND OVERRIDES ──
+    // Manual user input wins over standard mode classifications
+    bool finalPump = (cmdPump == CMD_NONE) ? basePump : (cmdPump == CMD_ON);
+    bool finalFan  = (cmdFan  == CMD_NONE) ? baseFan  : (cmdFan  == CMD_ON);
 
-    if (pump && fan) return ACTUATOR_PUMP_AND_FAN;
-    if (pump)        return ACTUATOR_PUMP;
-    if (fan)         return ACTUATOR_FAN;
+    // ── STEP 3: HARDWARE SAFETY COVERS (THE ABSOLUTE ULTIMATE WINNER) ──
+    // If the environment crosses dangerous extremes, ignore EVERYTHING else to protect the farm.
+    if (soil < SAFETY_SOIL_MIN) {
+        finalPump = true;
+        Serial.println("[SAFETY LOCKOUT] Soil critical! Blocking FE override to force pump ON.");
+    }
+    if (temp > SAFETY_TEMP_MAX) {
+        finalFan = true;
+        Serial.println("[SAFETY LOCKOUT] Temperature critical! Blocking FE override to force fan ON.");
+    }
+
+    // ── STEP 4: TRANSLATE TO FINAL RETURN STATE ──    
+    if (finalPump && finalFan) return ACTUATOR_PUMP_AND_FAN;
+    if (finalPump)             return ACTUATOR_PUMP;
+    if (finalFan)              return ACTUATOR_FAN;
     return ACTUATOR_IDLE;
 }
 
@@ -335,7 +337,9 @@ void setup()
     syncNTPTime();
 
     // TLS: verify broker certificate against embedded CA cert (DigiCert Global Root G2)
-    espClient.setCACert(EMQX_CA_CERT);
+    static BearSSL::X509List certList(EMQX_CA_CERT);
+    espClient.setTrustAnchors(&certList);
+    
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
     mqttClient.setCallback(onMqttMessage);
     mqttClient.setBufferSize(512);  // config payload can be larger than default 256 B
