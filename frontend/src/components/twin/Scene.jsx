@@ -394,12 +394,6 @@ function WaterPump({ active }) {
         />
       </mesh>
 
-      {/* Vertical supply tube: pump → top rail */}
-      <mesh position={[px, HH, pz]}>
-        <cylinderGeometry args={[0.006, 0.006, HH * 2 - 0.09, 6]} />
-        <meshStandardMaterial color="#2E7D9A" roughness={0.5} metalness={0.35} />
-      </mesh>
-
       {/* Horizontal drip rail — X axis */}
       <mesh position={[0, TUBE_Y, pz]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.006, 0.006, HW * 2 - 0.08, 8]} />
