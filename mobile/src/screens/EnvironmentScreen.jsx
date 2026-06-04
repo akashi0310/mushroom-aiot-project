@@ -1,36 +1,57 @@
-import { ScrollView, View, Text, StyleSheet } from 'react-native'
+import { ScrollView, View, Text, StyleSheet, Dimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { VictoryArea, VictoryAxis, VictoryChart, VictoryTheme } from 'victory-native'
 import { ConnectionBadge } from '../components/ConnectionBadge'
 import { useEnvironment } from '../hooks/useSocket'
 
+const SCREEN_W   = Dimensions.get('window').width
+const CARD_PAD   = 16 * 2          // readingCard horizontal padding
+const SCREEN_PAD = 16 * 2          // scroll content padding
+const CHART_H    = 110
+// Each data point = 6px → 60 points = 360px, clamp to at least screen width
+const PX_PER_PT  = 6
+
 function MiniChart({ data, dataKey, color, domain }) {
   if (!data.length) return null
-  const chartData = data.map((r, i) => ({ x: i, y: r[dataKey] ?? 0 }))
+  const chartData  = data.map((r, i) => ({ x: i, y: r[dataKey] ?? 0 }))
+  const chartWidth = Math.max(
+    SCREEN_W - SCREEN_PAD - CARD_PAD,
+    chartData.length * PX_PER_PT
+  )
+
   return (
-    <VictoryChart
-      theme={VictoryTheme.clean}
-      height={90}
-      padding={{ top: 8, bottom: 20, left: 28, right: 8 }}
-      domain={{ x: [0, Math.max(chartData.length - 1, 1)], y: domain }}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      // start at the right end so user sees latest data
+      onContentSizeChange={(w) => {}}
+      ref={(ref) => ref?.scrollToEnd({ animated: false })}
     >
-      <VictoryAxis
-        style={{ axis: { stroke: 'transparent' }, tickLabels: { fontSize: 8, fill: '#B8C8B8', fontFamily: 'monospace' } }}
-        tickCount={3}
-        tickFormat={(t) => {
-          const r = data[Math.round(t)]
-          return r ? new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-        }}
-      />
-      <VictoryAxis dependentAxis
-        style={{ axis: { stroke: 'transparent' }, tickLabels: { fontSize: 8, fill: '#B8C8B8', fontFamily: 'monospace' }, grid: { stroke: 'rgba(0,0,0,0.04)', strokeDasharray: '4 4' } }}
-        tickCount={3}
-      />
-      <VictoryArea data={chartData}
-        style={{ data: { stroke: color, strokeWidth: 2, fill: color, fillOpacity: 0.1 } }}
-        interpolation="monotoneX" animate={false}
-      />
-    </VictoryChart>
+      <VictoryChart
+        theme={VictoryTheme.clean}
+        width={chartWidth}
+        height={CHART_H}
+        padding={{ top: 8, bottom: 24, left: 32, right: 12 }}
+        domain={{ x: [0, Math.max(chartData.length - 1, 1)], y: domain }}
+      >
+        <VictoryAxis
+          style={{ axis: { stroke: '#EAEDEA' }, tickLabels: { fontSize: 8, fill: '#B8C8B8', fontFamily: 'monospace' } }}
+          tickCount={Math.min(6, chartData.length)}
+          tickFormat={(t) => {
+            const r = data[Math.round(t)]
+            return r ? new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+          }}
+        />
+        <VictoryAxis dependentAxis
+          style={{ axis: { stroke: 'transparent' }, tickLabels: { fontSize: 8, fill: '#B8C8B8', fontFamily: 'monospace' }, grid: { stroke: 'rgba(0,0,0,0.05)', strokeDasharray: '4 4' } }}
+          tickCount={4}
+        />
+        <VictoryArea data={chartData}
+          style={{ data: { stroke: color, strokeWidth: 2, fill: color, fillOpacity: 0.12 } }}
+          interpolation="monotoneX" animate={false}
+        />
+      </VictoryChart>
+    </ScrollView>
   )
 }
 
