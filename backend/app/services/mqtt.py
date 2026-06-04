@@ -9,8 +9,10 @@ import paho.mqtt.client as mqtt
 
 from app.core.config import settings
 from app.core.store import store
-from app.models.enums import MQTTStatus
+from app.models.enums import HealthStatus, MQTTStatus
 from app.models.schemas import AIPayload, CommandPayload, ControlPayload, DevicesPayload, EnvironmentPayload
+from app.services import supabase_db
+from app.services.notifier import notify_status_change
 
 _loop: asyncio.AbstractEventLoop | None = None
 _client: mqtt.Client | None = None
@@ -26,6 +28,12 @@ def _push_state() -> None:
     if _loop and not _loop.is_closed():
         from app.services.broadcaster import broadcast_state
         asyncio.run_coroutine_threadsafe(broadcast_state(), _loop)
+
+
+def _schedule(coro) -> None:
+    """Thread-safe: schedule any coroutine on the asyncio event loop (fire-and-forget)."""
+    if _loop and not _loop.is_closed():
+        asyncio.run_coroutine_threadsafe(coro, _loop)
 
 
 def publish_command(payload: CommandPayload) -> bool:
@@ -85,16 +93,35 @@ def _on_message(client, userdata, msg):
             payload = EnvironmentPayload(**data)
             store.update_environment(payload, payload.timestamp)
             print(f"[ENV]  {payload.air_temperature}°C  hum={payload.air_humidity}%  soil={payload.soil_moisture}%")
+            _schedule(supabase_db.insert_environment({
+                "timestamp":       payload.timestamp.isoformat(),
+                "air_temperature": payload.air_temperature,
+                "air_humidity":    payload.air_humidity,
+                "soil_moisture":   payload.soil_moisture,
+            }))
 
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
+            prev_devices = store.devices
             store.update_devices(payload, ts)
             print(f"[DEV]  fan={payload.fan}  pump={payload.pump}")
+            if prev_devices is None or prev_devices.fan != payload.fan or prev_devices.pump != payload.pump:
+                _schedule(supabase_db.insert_devices({"timestamp": ts.isoformat(), **payload.model_dump()}))
 
         elif topic == settings.topic_ai:
             payload = AIPayload(**data)
+            prev_ai = store.ai
             store.update_ai(payload, ts)
             print(f"[AI]   status={payload.status}")
+            if prev_ai is None or prev_ai.status != payload.status:
+                _schedule(supabase_db.insert_ai({"timestamp": ts.isoformat(), **payload.model_dump()}))
+                # Telegram: only notify inside the change-detection block
+                if settings.telegram_bot_token and settings.telegram_chat_id:
+                    _schedule(notify_status_change(
+                        payload.status,
+                        settings.telegram_bot_token,
+                        settings.telegram_chat_id,
+                    ))
 
         else:
             return  # ignore config echo and other topics

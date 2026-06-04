@@ -21,9 +21,14 @@ class Settings(BaseSettings):
     auth_secret_key: str = "change-this-secret-key-in-production"
     auth_algorithm: str = "HS256"
     auth_token_expire_hours: int = 24
-    auth_username: str = "admin"
-    auth_password_hash: str = ""  # bcrypt hash; if empty, plain auth_password is used
-    auth_password: str = "mushroom2024"  # used only if auth_password_hash is empty
+
+    # Supabase — must use service_role key (not anon key) to bypass RLS
+    supabase_url: str = ""
+    supabase_key: str = ""
+
+    # Telegram notifications
+    telegram_bot_token: str = ""
+    telegram_chat_id:   str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
