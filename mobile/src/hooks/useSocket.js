@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '../services/api'
 import socket from '../services/socket'
 import { useGreenhouseStore } from '../store/useGreenhouseStore'
@@ -48,26 +49,26 @@ export function useSocket() {
 }
 
 export function useGreenhouseSnapshot() {
-  return useGreenhouseStore((s) => ({
+  return useGreenhouseStore(useShallow((s) => ({
     environment: s.environment,
     devices:     s.devices,
     ai:          s.ai,
     lastUpdated: s.lastUpdated,
-  }))
+  })))
 }
 
 export function useEnvironment() {
-  return useGreenhouseStore((s) => ({ data: s.environment, history: s.envHistory }))
+  return useGreenhouseStore(useShallow((s) => ({ data: s.environment, history: s.envHistory })))
 }
 
 export function useDevices() {
-  return useGreenhouseStore((s) => ({ data: s.devices, history: s.devHistory }))
+  return useGreenhouseStore(useShallow((s) => ({ data: s.devices, history: s.devHistory })))
 }
 
 export function useAI() {
-  return useGreenhouseStore((s) => ({ data: s.ai, history: s.aiHistory }))
+  return useGreenhouseStore(useShallow((s) => ({ data: s.ai, history: s.aiHistory })))
 }
 
 export function useConnectionStatus() {
-  return useSocketStore((s) => ({ status: s.status, mqttStatus: s.mqttStatus }))
+  return useSocketStore(useShallow((s) => ({ status: s.status, mqttStatus: s.mqttStatus })))
 }
