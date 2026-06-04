@@ -19,15 +19,13 @@ function AuthGuard({ children }) {
   return children
 }
 
-function AppShell() {
-  const token = useAuthStore((s) => s.token)
+/**
+ * Renders only when authenticated.
+ * useSocket() is called here so the socket connects AFTER a valid token
+ * exists — prevents the ws:error that occurs when connecting with no token.
+ */
+function AuthenticatedShell() {
   useSocket()
-
-  if (!token) {
-    // Render only the router (login page) without sidebar
-    return <AppRouter />
-  }
-
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F5F6F8', color: '#1A261A' }}>
       <Sidebar />
@@ -36,6 +34,16 @@ function AppShell() {
       </div>
     </div>
   )
+}
+
+function AppShell() {
+  const token = useAuthStore((s) => s.token)
+
+  // No token → show login page only, no socket connection
+  if (!token) return <AppRouter />
+
+  // Token present → mount socket + full shell
+  return <AuthenticatedShell />
 }
 
 export default function App() {
