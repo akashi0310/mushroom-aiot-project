@@ -205,10 +205,12 @@ function Pebbles() {
 
 // ─── chibi mushrooms ──────────────────────────────────────────────────────────
 
+// Status = health condition, NOT growth stage.
+// All mushrooms are same-size adults — differentiate by COLOR & appearance only.
 const STAGE_CFG = {
-  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7, spots:true  },
-  warning:  { cap:'#D4C070', stem:'#EEE8C8', baseScale:0.72, count:7, spots:false }, // yellowish — stunted, early stress
-  critical: { cap:'#88B460', stem:'#C8CCA0', baseScale:0.50, count:6, spots:false }, // olive-brown — small, diseased
+  healthy:  { cap:'#F8EDD4', stem:'#FFF8EC', baseScale:1.00, count:7, spots:true  }, // cream, white spots — vibrant
+  warning:  { cap:'#C8A430', stem:'#D4B870', baseScale:1.00, count:7, spots:false }, // yellow-ochre — nutrient stress / over-watered
+  critical: { cap:'#7A6040', stem:'#A09060', baseScale:1.00, count:7, spots:false }, // dark brown — rotting / seriously diseased
 }
 
 function ChibiMushroom({ px, py, pz, scale=1, rotY=0, capColor, stemColor, spots, delay=0, lean=0 }) {
