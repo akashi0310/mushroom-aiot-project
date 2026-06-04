@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""  # anon/public key
 
+    # Telegram notifications
+    telegram_bot_token: str = ""
+    telegram_chat_id:   str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]

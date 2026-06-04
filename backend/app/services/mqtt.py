@@ -9,9 +9,10 @@ import paho.mqtt.client as mqtt
 
 from app.core.config import settings
 from app.core.store import store
-from app.models.enums import MQTTStatus
+from app.models.enums import HealthStatus, MQTTStatus
 from app.models.schemas import AIPayload, CommandPayload, ControlPayload, DevicesPayload, EnvironmentPayload
 from app.services import supabase_db
+from app.services.notifier import notify_status_change
 
 _loop: asyncio.AbstractEventLoop | None = None
 _client: mqtt.Client | None = None
@@ -105,6 +106,14 @@ def _on_message(client, userdata, msg):
             store.update_ai(payload, ts)
             print(f"[AI]   status={payload.status}")
             _schedule(supabase_db.insert_ai({"timestamp": ts.isoformat(), **payload.model_dump()}))
+
+            # Telegram notification on status change
+            if settings.telegram_bot_token and settings.telegram_chat_id:
+                _schedule(notify_status_change(
+                    payload.status,
+                    settings.telegram_bot_token,
+                    settings.telegram_chat_id,
+                ))
 
         else:
             return  # ignore config echo and other topics

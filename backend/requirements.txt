@@ -10,3 +10,5 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.17
 # Supabase persistent storage
 supabase>=2.3.0
+# Telegram notifications
+httpx>=0.27.0
