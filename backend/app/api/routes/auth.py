@@ -1,7 +1,7 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import require_auth
 from app.core.auth import DBUnavailableError, authenticate_user, create_access_token
@@ -52,3 +52,31 @@ async def login(body: LoginRequest):
 @router.get("/me", response_model=UserResponse)
 def me(username: str = Depends(require_auth)):
     return UserResponse(username=username)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:     str = Field(..., min_length=8, description="Minimum 8 characters")
+
+
+@router.put("/change-password", status_code=204)
+async def change_password(
+    body:     ChangePasswordRequest,
+    username: str = Depends(require_auth),
+):
+    from app.core.auth import hash_password
+    from app.services import supabase_db
+
+    # Verify current password first
+    try:
+        ok = await authenticate_user(username, body.current_password)
+    except DBUnavailableError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth service unavailable")
+
+    if not ok:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+
+    new_hash = hash_password(body.new_password)
+    success  = await supabase_db.update_user_password(username, new_hash)
+    if not success:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password")

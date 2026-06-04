@@ -129,6 +129,25 @@ async def get_devices_history(limit: int = 100) -> list[dict]:
         return []
 
 
+async def update_user_password(username: str, password_hash: str) -> bool:
+    """Update bcrypt password_hash for an existing user. Returns True on success."""
+    if not _ready():
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.patch(
+                f"{_url}/rest/v1/users",
+                params={"username": f"eq.{username}"},
+                json={"password_hash": password_hash},
+                headers=_headers(),
+            )
+            r.raise_for_status()
+            return True
+    except Exception as exc:
+        print(f"[Supabase] update_user_password error: {exc}")
+        return False
+
+
 async def get_user_by_username(username: str) -> dict | None:
     """Return {username, password_hash} or None if not found."""
     if not _ready():

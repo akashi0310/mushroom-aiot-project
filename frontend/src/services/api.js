@@ -27,6 +27,16 @@ async function post(path, body) {
   return res
 }
 
+async function put(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized') }
+  return res
+}
+
 export const api = {
   health:             ()             => get('/api/health'),
   state:              ()             => get('/api/state'),
@@ -46,5 +56,15 @@ export const api = {
     post('/api/control/command', payload).then(r => {
       if (r.status === 204) return
       return r.json().then(d => Promise.reject(d))
+    }),
+
+  changePassword: (currentPassword, newPassword) =>
+    put('/api/auth/change-password', {
+      current_password: currentPassword,
+      new_password:     newPassword,
+    }).then(async r => {
+      if (r.status === 204) return { ok: true }
+      const data = await r.json().catch(() => ({}))
+      return { ok: false, error: data.detail ?? `Error ${r.status}` }
     }),
 }
