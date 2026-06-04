@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
         print("[Supabase] ⚠️  SUPABASE_URL / SUPABASE_KEY not set — history will be empty")
 
     # MQTT
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     set_event_loop(loop)
     start_mqtt_thread()
 

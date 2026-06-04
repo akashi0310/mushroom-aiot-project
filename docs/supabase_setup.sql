@@ -40,6 +40,25 @@ CREATE INDEX IF NOT EXISTS idx_ai_timestamp
     ON ai_readings (timestamp DESC);
 
 -- ============================================================
+-- Security: Row Level Security
+-- Backend dùng service_role key (trong .env) → bypass RLS và ghi được
+-- Anon key (public) → bị chặn hoàn toàn, không đọc/ghi được từ browser
+-- ============================================================
+
+ALTER TABLE environment_readings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_states         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_readings            ENABLE ROW LEVEL SECURITY;
+
+-- Chặn tất cả truy cập từ anon/authenticated role (chỉ service_role được phép)
+CREATE POLICY "deny_all_environment" ON environment_readings USING (false);
+CREATE POLICY "deny_all_devices"     ON device_states         USING (false);
+CREATE POLICY "deny_all_ai"          ON ai_readings            USING (false);
+
+-- QUAN TRỌNG: Đổi SUPABASE_KEY trong .env sang service_role key
+-- (Supabase Dashboard → Project Settings → API → service_role secret)
+-- service_role key bypass RLS nên backend vẫn ghi/đọc bình thường
+
+-- ============================================================
 -- Optional: auto-delete old records (keep last 30 days)
 -- Uncomment if you want to stay within free tier limits
 -- ============================================================

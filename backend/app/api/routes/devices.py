@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_store
 from app.core.store import AppStore
@@ -15,7 +15,7 @@ def get_latest(store: AppStore = Depends(get_store)):
 
 
 @router.get("/history", response_model=HistoryResponse)
-async def get_history(limit: int = 100):
+async def get_history(limit: int = Query(default=100, ge=1, le=1000)):
     """Device state history from Supabase (persistent)."""
     data = await supabase_db.get_devices_history(limit)
     return HistoryResponse(data=data, count=len(data))

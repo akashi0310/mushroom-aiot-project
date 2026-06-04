@@ -93,7 +93,12 @@ def _on_message(client, userdata, msg):
             payload = EnvironmentPayload(**data)
             store.update_environment(payload, payload.timestamp)
             print(f"[ENV]  {payload.air_temperature}°C  hum={payload.air_humidity}%  soil={payload.soil_moisture}%")
-            _schedule(supabase_db.insert_environment(payload.model_dump(mode="json")))
+            _schedule(supabase_db.insert_environment({
+                "timestamp":       payload.timestamp.isoformat(),
+                "air_temperature": payload.air_temperature,
+                "air_humidity":    payload.air_humidity,
+                "soil_moisture":   payload.soil_moisture,
+            }))
 
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
@@ -110,14 +115,13 @@ def _on_message(client, userdata, msg):
             print(f"[AI]   status={payload.status}")
             if prev_ai is None or prev_ai.status != payload.status:
                 _schedule(supabase_db.insert_ai({"timestamp": ts.isoformat(), **payload.model_dump()}))
-
-            # Telegram notification on status change
-            if settings.telegram_bot_token and settings.telegram_chat_id:
-                _schedule(notify_status_change(
-                    payload.status,
-                    settings.telegram_bot_token,
-                    settings.telegram_chat_id,
-                ))
+                # Telegram: only notify inside the change-detection block
+                if settings.telegram_bot_token and settings.telegram_chat_id:
+                    _schedule(notify_status_change(
+                        payload.status,
+                        settings.telegram_bot_token,
+                        settings.telegram_chat_id,
+                    ))
 
         else:
             return  # ignore config echo and other topics
