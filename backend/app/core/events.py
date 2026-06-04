@@ -4,11 +4,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.services import supabase_db
 from app.services.mqtt import set_event_loop, start_mqtt_thread
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Supabase
+    if settings.supabase_url and settings.supabase_key:
+        await supabase_db.init(settings.supabase_url, settings.supabase_key)
+    else:
+        print("[Supabase] ⚠️  SUPABASE_URL / SUPABASE_KEY not set — history will be empty")
+
+    # MQTT
     loop = asyncio.get_event_loop()
     set_event_loop(loop)
     start_mqtt_thread()

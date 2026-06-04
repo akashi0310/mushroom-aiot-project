@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     auth_password_hash: str = ""  # bcrypt hash; if empty, plain auth_password is used
     auth_password: str = "mushroom2024"  # used only if auth_password_hash is empty
 
+    # Supabase
+    supabase_url: str = ""
+    supabase_key: str = ""  # anon/public key
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]

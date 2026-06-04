@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.store import store
 from app.models.enums import MQTTStatus
 from app.models.schemas import AIPayload, CommandPayload, ControlPayload, DevicesPayload, EnvironmentPayload
+from app.services import supabase_db
 
 _loop: asyncio.AbstractEventLoop | None = None
 _client: mqtt.Client | None = None
@@ -26,6 +27,12 @@ def _push_state() -> None:
     if _loop and not _loop.is_closed():
         from app.services.broadcaster import broadcast_state
         asyncio.run_coroutine_threadsafe(broadcast_state(), _loop)
+
+
+def _schedule(coro) -> None:
+    """Thread-safe: schedule any coroutine on the asyncio event loop (fire-and-forget)."""
+    if _loop and not _loop.is_closed():
+        asyncio.run_coroutine_threadsafe(coro, _loop)
 
 
 def publish_command(payload: CommandPayload) -> bool:
@@ -85,16 +92,19 @@ def _on_message(client, userdata, msg):
             payload = EnvironmentPayload(**data)
             store.update_environment(payload, payload.timestamp)
             print(f"[ENV]  {payload.air_temperature}°C  hum={payload.air_humidity}%  soil={payload.soil_moisture}%")
+            _schedule(supabase_db.insert_environment(payload.model_dump(mode="json")))
 
         elif topic == settings.topic_devices:
             payload = DevicesPayload(**data)
             store.update_devices(payload, ts)
             print(f"[DEV]  fan={payload.fan}  pump={payload.pump}")
+            _schedule(supabase_db.insert_devices({"timestamp": ts.isoformat(), **payload.model_dump()}))
 
         elif topic == settings.topic_ai:
             payload = AIPayload(**data)
             store.update_ai(payload, ts)
             print(f"[AI]   status={payload.status}")
+            _schedule(supabase_db.insert_ai({"timestamp": ts.isoformat(), **payload.model_dump()}))
 
         else:
             return  # ignore config echo and other topics
