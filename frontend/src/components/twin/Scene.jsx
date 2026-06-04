@@ -401,7 +401,7 @@ function WaterPump({ active }) {
       </mesh>
 
       {/* Horizontal drip rail — Z axis (cross pipe) */}
-      <mesh position={[px, TUBE_Y, 0]}>
+      <mesh position={[px, TUBE_Y, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.006, 0.006, HD * 2 - 0.08, 8]} />
         <meshStandardMaterial color="#2E7D9A" roughness={0.5} metalness={0.35} />
       </mesh>
