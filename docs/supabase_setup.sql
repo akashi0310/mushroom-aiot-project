@@ -67,6 +67,12 @@ ALTER TABLE ai_readings            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users                  ENABLE ROW LEVEL SECURITY;
 
 -- Chặn tất cả truy cập từ anon/authenticated role (chỉ service_role được phép)
+-- DROP trước để script có thể chạy lại nhiều lần mà không lỗi
+DROP POLICY IF EXISTS "deny_all_environment" ON environment_readings;
+DROP POLICY IF EXISTS "deny_all_devices"     ON device_states;
+DROP POLICY IF EXISTS "deny_all_ai"          ON ai_readings;
+DROP POLICY IF EXISTS "deny_all_users"       ON users;
+
 CREATE POLICY "deny_all_environment" ON environment_readings USING (false);
 CREATE POLICY "deny_all_devices"     ON device_states         USING (false);
 CREATE POLICY "deny_all_ai"          ON ai_readings            USING (false);
