@@ -21,6 +21,12 @@ services:
       # https://dashboard.render.com → mushroom-backend → Environment
       - key: CORS_ORIGINS
         sync: false
+      - key: AUTH_SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
 
   # ── Frontend: React/Vite static site ─────────────────────────────────────────
   - type: web
